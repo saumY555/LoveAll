@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, memo } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import {
@@ -28,6 +28,90 @@ interface UploadDropzoneModalProps {
   onUploadComplete?: () => void;
 }
 
+interface UploadItemRowProps {
+  item: FileUploadItem;
+  isUploading: boolean;
+  onRetry: (item: FileUploadItem) => void;
+  onRemove: (id: string) => void;
+}
+
+// Memoized item row prevents re-rendering all 100+ file rows on every progress tick
+const UploadItemRow = memo(function UploadItemRow({
+  item,
+  isUploading,
+  onRetry,
+  onRemove,
+}: UploadItemRowProps) {
+  return (
+    <div className="flex items-center justify-between p-3 gap-3">
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
+          <FileImage className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate">
+            {item.file.name}
+          </p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-[11px] text-zinc-500">
+              {formatBytes(item.file.size)}
+            </span>
+            {item.status === 'processing' && (
+              <span className="text-[11px] text-indigo-600 font-medium animate-pulse">
+                Generating WebP preview...
+              </span>
+            )}
+            {item.status === 'error' && (
+              <span className="text-[11px] text-red-600 font-medium truncate">
+                {item.error || 'Failed'}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Status Indicator / Actions */}
+      <div className="flex items-center gap-2 shrink-0">
+        {item.status === 'uploading' && (
+          <div className="w-16 bg-zinc-200 rounded-full h-1.5 dark:bg-zinc-700">
+            <div
+              className="bg-indigo-600 h-1.5 rounded-full transition-all duration-150"
+              style={{ width: `${item.progress}%` }}
+            />
+          </div>
+        )}
+
+        {item.status === 'done' && (
+          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+        )}
+
+        {item.status === 'error' && (
+          <div className="flex items-center gap-1">
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <button
+              onClick={() => onRetry(item)}
+              title="Retry"
+              className="text-xs text-indigo-600 hover:underline p-1 cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {item.status === 'queued' && (
+          <button
+            onClick={() => onRemove(item.id)}
+            disabled={isUploading}
+            className="text-zinc-400 hover:text-zinc-600 p-1 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+});
+
 export function UploadDropzoneModal({
   isOpen,
   onClose,
@@ -37,19 +121,20 @@ export function UploadDropzoneModal({
   const [items, setItems] = useState<FileUploadItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [warningMessage, setWarningMessage] = useState<string | null>(null);
 
   const addFiles = useCallback((files: FileList | File[]) => {
     const validFiles: FileUploadItem[] = [];
+    const skippedReasons: string[] = [];
     const maxBytes = 50 * 1024 * 1024;
 
     Array.from(files).forEach((file) => {
       if (!file.type.startsWith('image/')) {
-        alert(`Skipped non-image file: ${file.name}`);
+        skippedReasons.push(`${file.name} (not an image)`);
         return;
       }
       if (file.size > maxBytes) {
-        alert(`Skipped ${file.name}: exceeds 50MB limit`);
+        skippedReasons.push(`${file.name} (>50MB)`);
         return;
       }
       validFiles.push({
@@ -60,7 +145,19 @@ export function UploadDropzoneModal({
       });
     });
 
-    setItems((prev) => [...prev, ...validFiles]);
+    if (skippedReasons.length > 0) {
+      setWarningMessage(
+        `Skipped ${skippedReasons.length} unsupported file(s): ${skippedReasons.slice(0, 3).join(', ')}${
+          skippedReasons.length > 3 ? '...' : ''
+        }`
+      );
+    } else {
+      setWarningMessage(null);
+    }
+
+    if (validFiles.length > 0) {
+      setItems((prev) => [...prev, ...validFiles]);
+    }
   }, []);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -80,12 +177,12 @@ export function UploadDropzoneModal({
     }
   };
 
-  const removeItem = (id: string) => {
+  const removeItem = useCallback((id: string) => {
     setItems((prev) => prev.filter((item) => item.id !== id));
-  };
+  }, []);
 
-  // Upload an individual item with XHR for accurate upload progress
-  const uploadSingleItem = (item: FileUploadItem): Promise<boolean> => {
+  // Upload an individual item with throttled XHR progress updates
+  const uploadSingleItem = useCallback((item: FileUploadItem): Promise<boolean> => {
     return new Promise((resolve) => {
       setItems((prev) =>
         prev.map((i) =>
@@ -99,20 +196,25 @@ export function UploadDropzoneModal({
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `/api/events/${eventId}/photos/upload`);
 
+      let lastReportedProgress = 10;
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
-          const percent = Math.round((e.loaded / e.total) * 90);
-          setItems((prev) =>
-            prev.map((i) =>
-              i.id === item.id
-                ? {
-                    ...i,
-                    progress: percent,
-                    status: percent >= 90 ? 'processing' : 'uploading',
-                  }
-                : i
-            )
-          );
+          const percent = Math.min(89, Math.round((e.loaded / e.total) * 90));
+          // Throttle state dispatches: update only on meaningful progress jumps (>= 4%)
+          if (percent - lastReportedProgress >= 4 || percent >= 88) {
+            lastReportedProgress = percent;
+            setItems((prev) =>
+              prev.map((i) =>
+                i.id === item.id
+                  ? {
+                      ...i,
+                      progress: percent,
+                      status: percent >= 88 ? 'processing' : 'uploading',
+                    }
+                  : i
+              )
+            );
+          }
         }
       };
 
@@ -178,7 +280,7 @@ export function UploadDropzoneModal({
 
       xhr.send(formData);
     });
-  };
+  }, [eventId]);
 
   const handleStartUpload = async () => {
     const queuedItems = items.filter((i) => i.status === 'queued' || i.status === 'error');
@@ -228,30 +330,47 @@ export function UploadDropzoneModal({
       maxWidth="lg"
     >
       <div className="space-y-4">
-        {/* Drag and Drop Zone */}
-        <div
+        {/* Warning notification banner if files were skipped */}
+        {warningMessage && (
+          <div className="flex items-center justify-between rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/40 p-3 text-xs text-amber-800 dark:text-amber-300">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span>{warningMessage}</span>
+            </div>
+            <button
+              onClick={() => setWarningMessage(null)}
+              className="text-amber-600 hover:text-amber-800 p-1 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Drag and Drop Zone using semantic label for native OS file selection */}
+        <label
+          htmlFor="gallery-file-upload-input"
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-          className={`relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 text-center cursor-pointer transition-colors ${
+          className={`relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 text-center cursor-pointer transition-colors block ${
             isDragging
               ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/20'
               : 'border-zinc-300 hover:border-zinc-400 bg-zinc-50/50 dark:border-zinc-700 dark:bg-zinc-900/50'
           }`}
         >
           <input
+            id="gallery-file-upload-input"
             type="file"
-            ref={fileInputRef}
             multiple
             accept="image/*"
             onChange={(e) => {
               if (e.target.files) addFiles(e.target.files);
+              e.target.value = '';
             }}
-            className="hidden"
+            className="sr-only"
           />
 
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400 mb-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400 mb-3 mx-auto">
             <Upload className="h-6 w-6" />
           </div>
 
@@ -261,78 +380,19 @@ export function UploadDropzoneModal({
           <p className="mt-1 text-xs text-zinc-500">
             JPEG, PNG, WebP, HEIC up to 50MB per file. Multi-file upload supported.
           </p>
-        </div>
+        </label>
 
-        {/* Selected Files List with per-file progress */}
+        {/* Selected Files List with memoized rows and smooth scroll container */}
         {items.length > 0 && (
-          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800 max-h-64 overflow-y-auto">
+          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800 max-h-64 overflow-y-auto overscroll-contain">
             {items.map((item) => (
-              <div key={item.id} className="flex items-center justify-between p-3 gap-3">
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
-                    <FileImage className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate">
-                      {item.file.name}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[11px] text-zinc-500">
-                        {formatBytes(item.file.size)}
-                      </span>
-                      {item.status === 'processing' && (
-                        <span className="text-[11px] text-indigo-600 font-medium animate-pulse">
-                          Generating WebP preview...
-                        </span>
-                      )}
-                      {item.status === 'error' && (
-                        <span className="text-[11px] text-red-600 font-medium truncate">
-                          {item.error || 'Failed'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Status Indicator / Actions */}
-                <div className="flex items-center gap-2">
-                  {item.status === 'uploading' && (
-                    <div className="w-16 bg-zinc-200 rounded-full h-1.5 dark:bg-zinc-700">
-                      <div
-                        className="bg-indigo-600 h-1.5 rounded-full transition-all duration-150"
-                        style={{ width: `${item.progress}%` }}
-                      />
-                    </div>
-                  )}
-
-                  {item.status === 'done' && (
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                  )}
-
-                  {item.status === 'error' && (
-                    <div className="flex items-center gap-1">
-                      <AlertCircle className="w-5 h-5 text-red-600" />
-                      <button
-                        onClick={() => uploadSingleItem(item)}
-                        title="Retry"
-                        className="text-xs text-indigo-600 hover:underline p-1 cursor-pointer"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
-
-                  {item.status === 'queued' && (
-                    <button
-                      onClick={() => removeItem(item.id)}
-                      disabled={isUploading}
-                      className="text-zinc-400 hover:text-zinc-600 p-1 cursor-pointer"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
+              <UploadItemRow
+                key={item.id}
+                item={item}
+                isUploading={isUploading}
+                onRetry={uploadSingleItem}
+                onRemove={removeItem}
+              />
             ))}
           </div>
         )}
