@@ -1,9 +1,23 @@
 @import "tailwindcss";
+@import "../styles/landing.css";
 
 :root {
+  /* loveall design tokens */
+  color-scheme: light;
+  --bg: #FFF4E9;
+  --surface: #FFFFFF;
+  --ink: #3B2B26;
+  --muted: #7A5C54;
+  --line: #3B2B26;
+  --tomato: #E8714F;
+  --sun: #FFC83D;
+  --mint: #6FD9B0;
+  --pink: #FFA9CB;
+  --lilac: #C5B4FF;
+  --on: #2A1A14;
+
   --background: #faf8f5;
   --foreground: #1e1e24;
-  --muted: #5a5a6e;
   --cream-card: #ffffff;
   --cream-border: #ede8e1;
   --pastel-pink: #f472b6;
@@ -12,6 +26,11 @@
   --pastel-mint: #6ee7b7;
   --pastel-peach: #fb923c;
   --pastel-sky: #38bdf8;
+}
+
+:focus-visible {
+  outline: 3px solid var(--tomato);
+  outline-offset: 3px;
 }
 
 @theme inline {

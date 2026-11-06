@@ -3,12 +3,18 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { Camera, Plus, LogOut, User as UserIcon, Sparkles, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
 export function Navbar({ onOpenCreateModal }: { onOpenCreateModal?: () => void }) {
+  const pathname = usePathname();
   const { data: session, status } = useSession();
+
+  if (pathname === '/') {
+    return null;
+  }
 
   return (
     <header className="sticky top-0 z-40 w-full px-3 sm:px-6 pt-3 pb-1">

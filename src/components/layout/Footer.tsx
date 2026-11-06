@@ -1,9 +1,15 @@
 'use client';
 
 import React from 'react';
+import { usePathname } from 'next/navigation';
 import { Heart, Sparkles, Smile } from 'lucide-react';
 
 export function Footer() {
+  const pathname = usePathname();
+
+  if (pathname === '/') {
+    return null;
+  }
   return (
     <footer className="mt-auto border-t-2 border-stone-200/80 bg-white/70 py-8 dark:border-stone-800 dark:bg-stone-900/60 backdrop-blur-xs">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
