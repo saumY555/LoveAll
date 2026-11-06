@@ -1,0 +1,270 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+// ----------------------------------------------------
+// NextAuth / Auth.js Models
+// ----------------------------------------------------
+
+model User {
+  id            String          @id @default(cuid())
+  name          String?
+  email         String?         @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  memberships   EventMember[]
+  photoUploads  PhotoUploadReference[]
+  privacyConsents MemberPrivacyConsent[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ----------------------------------------------------
+// Event & Member Models
+// ----------------------------------------------------
+
+enum EventRole {
+  OWNER
+  MEMBER
+}
+
+model Event {
+  id               String          @id @default(cuid())
+  name             String
+  description      String?         @db.Text
+  coverImage       String?
+  eventDate        DateTime?
+  isPrivate        Boolean         @default(true)
+  allowGuestView   Boolean         @default(false)
+  allowGuestUpload Boolean         @default(false)
+  isDeleted        Boolean         @default(false)
+  deletedAt        DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  members          EventMember[]
+  photos           Photo[]
+  shareLinks       ShareLink[]
+  guestIdentities  GuestIdentity[]
+  people           Person[]
+  privacyConsents  MemberPrivacyConsent[]
+
+  @@index([isDeleted])
+}
+
+model EventMember {
+  id        String    @id @default(cuid())
+  eventId   String
+  userId    String
+  role      EventRole @default(MEMBER)
+  joinedAt  DateTime  @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([userId])
+  @@index([eventId])
+}
+
+// ----------------------------------------------------
+// Guest Identity & Sharing Links
+// ----------------------------------------------------
+
+model GuestIdentity {
+  id                String                 @id @default(cuid())
+  eventId           String
+  temporaryToken    String                 @unique
+  displayName       String?
+  ipHash            String?
+  createdAt         DateTime               @default(now())
+  expiresAt         DateTime
+  convertedToUserId String?
+  
+  event             Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  uploadReferences  PhotoUploadReference[]
+
+  @@index([temporaryToken])
+  @@index([eventId])
+}
+
+model ShareLink {
+  id        String    @id @default(cuid())
+  eventId   String
+  token     String    @unique
+  canView   Boolean   @default(true)
+  canUpload Boolean   @default(false)
+  isRevoked Boolean   @default(false)
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([eventId])
+}
+
+// ----------------------------------------------------
+// Physical Asset vs. Logical Photo Models
+// ----------------------------------------------------
+
+model PhotoAsset {
+  id                 String    @id @default(cuid())
+  fileHash           String    @unique // SHA-256 hash of the original file
+  storageKeyOriginal String
+  storageKeyPreview  String?
+  storageKeyThumbnail String?
+  mimeType           String
+  byteSize           Int
+  width              Int?
+  height             Int?
+  captureDate        DateTime?
+  createdAt          DateTime  @default(now())
+
+  photos             Photo[]
+}
+
+enum FaceStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+model Photo {
+  id               String                 @id @default(cuid())
+  eventId          String
+  assetId          String
+  isDeleted        Boolean                @default(false)
+  deletedAt        DateTime?
+  faceStatus       FaceStatus             @default(PENDING)
+  faceError        String?                @db.Text
+  faceProcessedAt  DateTime?
+  createdAt        DateTime               @default(now())
+
+  event            Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  asset            PhotoAsset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  uploadReferences PhotoUploadReference[]
+  faces            Face[]
+
+  @@unique([eventId, assetId])
+  @@index([eventId, isDeleted])
+  @@index([createdAt])
+  @@index([faceStatus])
+  @@index([eventId, faceStatus])
+}
+
+model PhotoUploadReference {
+  id               String         @id @default(cuid())
+  photoId          String
+  uploadedByUserId String?
+  guestUploaderId  String?
+  originalFilename String
+  uploadedAt       DateTime       @default(now())
+
+  photo            Photo          @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  uploadedByUser   User?          @relation(fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  guestUploader    GuestIdentity? @relation(fields: [guestUploaderId], references: [id], onDelete: SetNull)
+
+  @@index([photoId])
+  @@index([uploadedByUserId])
+  @@index([guestUploaderId])
+}
+
+// ----------------------------------------------------
+// AI Face Recognition & Discovery Models
+// ----------------------------------------------------
+
+model Person {
+  id           String    @id @default(cuid())
+  eventId      String
+  name         String?   // User-defined name or null for "Person 1", "Person 2"
+  thumbnailUrl String?   // Cropped face thumbnail URL (representative avatar)
+  isCover      Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  event Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  faces Face[]
+
+  @@index([eventId])
+}
+
+model Face {
+  id           String   @id @default(cuid())
+  photoId      String
+  personId     String?  // Linked person cluster (null if unclustered/noise)
+  boundingBox  Json     // { x, y, width, height } normalized 0.0 to 1.0
+  embedding    Json     // 512-dimensional vector stored as JSON array of floats
+  thumbnailUrl String?  // Cropped face thumbnail URL
+  confidence   Float    @default(0.0) // Face detection confidence score
+  isNoise      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  photo  Photo   @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  person Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
+
+  @@index([photoId])
+  @@index([personId])
+}
+
+model MemberPrivacyConsent {
+  id                     String    @id @default(cuid())
+  eventId                String
+  userId                 String
+  consentFaceRecognition Boolean   @default(true)
+  optedOutAt             DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+}
+
