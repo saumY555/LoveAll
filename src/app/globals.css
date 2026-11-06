@@ -1,26 +1,131 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #faf8f5;
+  --foreground: #1e1e24;
+  --muted: #5a5a6e;
+  --cream-card: #ffffff;
+  --cream-border: #ede8e1;
+  --pastel-pink: #f472b6;
+  --pastel-lavender: #c084fc;
+  --pastel-yellow: #fde047;
+  --pastel-mint: #6ee7b7;
+  --pastel-peach: #fb923c;
+  --pastel-sky: #38bdf8;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #15151c;
+    --foreground: #f4f4f7;
+    --muted: #a1a1b5;
+    --cream-card: #1f1f2a;
+    --cream-border: #2e2e3d;
   }
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Playful custom animations & helpers */
+@keyframes float-slow {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(1deg);
+  }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes sparkle-twinkle {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.25) rotate(15deg);
+    opacity: 1;
+  }
+}
+
+.animate-float {
+  animation: float-slow 4s ease-in-out infinite;
+}
+
+.animate-sparkle {
+  animation: sparkle-twinkle 2.5s ease-in-out infinite;
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 3s ease-in-out infinite;
+}
+
+/* Playful pastel text gradients */
+.text-gradient-playful {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #3b82f6 100%);
+}
+
+.text-gradient-sunset {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(135deg, #f43f5e 0%, #f97316 50%, #eab308 100%);
+}
+
+.text-gradient-mint {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+}
+
+/* Playful ambient background glow mesh */
+.bg-pastel-glow {
+  background-image:
+    radial-gradient(at 10% 15%, rgba(244, 114, 182, 0.09) 0px, transparent 50%),
+    radial-gradient(at 85% 10%, rgba(192, 132, 252, 0.09) 0px, transparent 50%),
+    radial-gradient(at 50% 60%, rgba(253, 224, 71, 0.06) 0px, transparent 50%),
+    radial-gradient(at 90% 85%, rgba(110, 231, 183, 0.08) 0px, transparent 50%),
+    radial-gradient(at 15% 85%, rgba(56, 189, 248, 0.07) 0px, transparent 50%);
+}
+
+/* Smooth custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(160, 160, 180, 0.3);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(160, 160, 180, 0.5);
 }

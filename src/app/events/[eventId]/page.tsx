@@ -265,49 +265,49 @@ export default function EventDetailPage({
       </div>
 
       {/* Modern Responsive Event Header Card */}
-      <div className="relative overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900 transition-all">
+      <div className="relative overflow-hidden rounded-3xl border-2 border-stone-200/90 bg-white/95 shadow-sm dark:border-stone-800 dark:bg-stone-900/95 transition-all">
         {event.coverImage && (
-          <div className="relative h-40 sm:h-60 w-full overflow-hidden">
+          <div className="relative h-44 sm:h-64 w-full overflow-hidden">
             <img
               src={event.coverImage}
               alt={event.name}
               className="h-full w-full object-cover"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-stone-950/75 via-stone-950/20 to-transparent" />
           </div>
         )}
 
-        <div className="p-4 sm:p-7">
+        <div className="p-5 sm:p-8">
           <div className="flex flex-col gap-4">
             {/* Title & Role Row */}
-            <div className="flex flex-wrap items-center justify-between gap-2.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-100">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h1 className="text-xl sm:text-3xl font-black tracking-tight text-stone-900 dark:text-stone-100">
                   {event.name}
                 </h1>
                 {isOwner ? (
-                  <Badge variant="purple" className="py-0.5 text-[11px]">
-                    <ShieldCheck className="w-3.5 h-3.5 mr-1" />
-                    Owner
+                  <Badge variant="lavender" className="py-1 px-3 text-xs">
+                    <ShieldCheck className="w-3.5 h-3.5 mr-1 text-purple-600" />
+                    Host & Owner
                   </Badge>
                 ) : event.userRole === 'MEMBER' ? (
-                  <Badge variant="primary" className="py-0.5 text-[11px]">
+                  <Badge variant="sky" className="py-1 px-3 text-xs">
                     Member
                   </Badge>
                 ) : null}
               </div>
 
-              {/* Action Buttons Group */}
+              {/* Action Buttons Group with cheerful pill styles */}
               <div className="flex items-center gap-2 flex-wrap">
                 {!event.isGuest && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setIsMemberModalOpen(true)}
-                    className="gap-1.5 text-xs h-8 px-2.5 sm:px-3"
+                    className="gap-1.5 text-xs h-8.5 px-3 sm:px-4"
                     title="Manage participants"
                   >
-                    <Users className="w-3.5 h-3.5" />
+                    <Users className="w-3.5 h-3.5 text-purple-500" />
                     <span className="hidden sm:inline">Members</span>
                   </Button>
                 )}
@@ -316,20 +316,20 @@ export default function EventDetailPage({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="gap-1.5 text-xs h-8 px-2.5 sm:px-3 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-850 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+                    className="gap-1.5 text-xs h-8.5 px-3 sm:px-4 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-850 hover:bg-purple-50 dark:hover:bg-purple-950/40"
                     onClick={() => setIsShareModalOpen(true)}
                     title="Share event and QR code"
                   >
                     <Share2 className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Share</span>
+                    <span>Share & QR</span>
                   </Button>
                 )}
 
                 {isOwner && (
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    className="gap-1.5 text-xs h-8 px-2.5 sm:px-3"
+                    className="gap-1.5 text-xs h-8.5 px-2 sm:px-3 text-stone-500 hover:text-stone-800"
                     onClick={() => setIsSettingsModalOpen(true)}
                     title="Event settings"
                   >
@@ -342,41 +342,41 @@ export default function EventDetailPage({
                   <Button
                     variant="primary"
                     size="sm"
-                    className="gap-1.5 text-xs h-8 px-3"
+                    className="gap-1.5 text-xs h-8.5 px-4 shadow-sm"
                     onClick={() => setIsUploadModalOpen(true)}
                   >
                     <Upload className="w-3.5 h-3.5" />
-                    <span>Upload</span>
+                    <span>Upload Photos</span>
                   </Button>
                 )}
               </div>
             </div>
 
             {event.description && (
-              <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 max-w-2xl">
+              <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-300 max-w-2xl leading-relaxed">
                 {event.description}
               </p>
             )}
 
             {/* Event Metadata Strip */}
-            <div className="flex flex-wrap items-center gap-3 sm:gap-5 text-[11px] sm:text-xs text-zinc-500 dark:text-zinc-400 pt-1 border-t border-zinc-100 dark:border-zinc-800/80">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-[11px] sm:text-xs text-stone-500 dark:text-stone-400 pt-2 border-t-2 border-stone-100 dark:border-stone-800/80 font-medium">
               <div className="flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-zinc-400" />
-                <span>{event.eventDate ? formatDate(event.eventDate) : 'No date'}</span>
+                <Calendar className="w-3.5 h-3.5 text-stone-400" />
+                <span>{event.eventDate ? formatDate(event.eventDate) : 'No date set'}</span>
               </div>
 
               <button
                 onClick={() => setIsMemberModalOpen(true)}
-                className="flex items-center gap-1.5 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 hover:text-purple-600 dark:hover:text-purple-400 transition-colors cursor-pointer"
               >
-                <Users className="w-3.5 h-3.5 text-zinc-400" />
-                <span className="underline decoration-dotted font-medium">
+                <Users className="w-3.5 h-3.5 text-purple-400" />
+                <span className="underline decoration-dotted font-semibold">
                   {event._count?.members || 1} Participants
                 </span>
               </button>
 
-              <div className="flex items-center gap-1.5 font-medium text-zinc-700 dark:text-zinc-300">
-                <ImageIcon className="w-3.5 h-3.5 text-indigo-500" />
+              <div className="flex items-center gap-1.5 font-bold text-stone-800 dark:text-stone-200">
+                <ImageIcon className="w-3.5 h-3.5 text-pink-500" />
                 <span>{photos.length} Photos</span>
               </div>
             </div>
@@ -403,12 +403,12 @@ export default function EventDetailPage({
       {/* Gallery Section */}
       <section className="mt-6">
         {/* Gallery Toolbar: Title, Filter Chips, Download All & Select Mode Toggle */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 sm:pb-4 border-b border-zinc-200 dark:border-zinc-800 gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b-2 border-stone-200/80 dark:border-stone-800 gap-3">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <h2 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-              Gallery
-              <Badge variant="default" className="text-[11px] py-0 px-2 font-semibold">
-                {photos.length}
+            <h2 className="text-base sm:text-lg font-black text-stone-900 dark:text-stone-100 flex items-center gap-2">
+              <span>Gallery</span>
+              <Badge variant="pink" className="text-xs py-0.5 px-2.5 font-bold">
+                {photos.length} photos
               </Badge>
             </h2>
 
@@ -416,34 +416,34 @@ export default function EventDetailPage({
             {selectedPersonIds.length > 0 && (
               <button
                 onClick={handleClearPeople}
-                className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-medium text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:text-indigo-300 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 rounded-full bg-purple-100/80 px-3 py-1 text-xs font-bold text-purple-800 hover:bg-purple-200 dark:bg-purple-950/60 dark:text-purple-300 transition-all cursor-pointer shadow-2xs hover:scale-102"
               >
                 <span>
                   {selectedPersonIds.includes('none')
-                    ? 'Other Photos'
+                    ? 'Landscapes & Other'
                     : selectedPersonIds.length === 1
                     ? '1 Person'
                     : `${selectedPersonIds.length} People (${filterMode === 'all' ? 'Together' : 'Either'})`}
                 </span>
-                <X className="w-3 h-3 ml-0.5 opacity-70" />
+                <X className="w-3.5 h-3.5 opacity-70 hover:opacity-100" />
               </button>
             )}
           </div>
 
           {/* Gallery Action Controls */}
           {photos.length > 0 && (
-            <div className="flex items-center gap-2 self-start sm:self-auto">
+            <div className="flex items-center gap-2.5 self-start sm:self-auto">
               {/* Download All / Download Filtered Button */}
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={() => handleDownloadZip()}
                 isLoading={isDownloadingZip}
                 disabled={isDownloadingZip || photos.length === 0}
-                className="gap-1.5 text-xs h-8"
+                className="gap-1.5 text-xs h-8.5 px-4 shadow-2xs"
                 title="Download all photos as a ZIP archive"
               >
-                <Download className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                <Download className="w-3.5 h-3.5 text-amber-600" />
                 <span>
                   {selectedPersonIds.length > 0
                     ? `Download Filtered (${photos.length})`
@@ -462,7 +462,7 @@ export default function EventDetailPage({
                     setIsSelectionMode(true);
                   }
                 }}
-                className="gap-1.5 text-xs h-8"
+                className="gap-1.5 text-xs h-8.5 px-4 shadow-2xs"
               >
                 <CheckSquare className="w-3.5 h-3.5" />
                 <span>{isSelectionMode ? 'Done' : 'Select'}</span>
@@ -580,18 +580,18 @@ export default function EventDetailPage({
 
       {/* Sticky Bottom Floating Batch Action Bar for Mobile & Desktop */}
       {isSelectionMode && (
-        <div className="fixed inset-x-0 bottom-0 z-40 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-zinc-200 dark:border-zinc-800 shadow-2xl px-4 py-3 transition-transform animate-in slide-in-from-bottom duration-200">
-          <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="fixed inset-x-0 bottom-4 z-40 px-4 transition-transform animate-in slide-in-from-bottom duration-200">
+          <div className="mx-auto max-w-4xl rounded-full border-2 border-purple-200/90 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md shadow-2xl shadow-purple-950/15 px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-3">
             {/* Selection Status & Select All */}
             <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
               <button
                 onClick={handleSelectAll}
-                className="flex items-center gap-2 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer"
+                className="flex items-center gap-2 text-xs font-bold text-stone-700 dark:text-stone-200 hover:text-purple-600 dark:hover:text-purple-400 cursor-pointer"
               >
                 {selectedPhotoIds.length === photos.length ? (
-                  <CheckSquare className="w-4 h-4 text-indigo-600" />
+                  <CheckSquare className="w-4 h-4 text-purple-600" />
                 ) : (
-                  <Square className="w-4 h-4 text-zinc-400" />
+                  <Square className="w-4 h-4 text-stone-400" />
                 )}
                 <span>
                   {selectedPhotoIds.length === photos.length
@@ -600,23 +600,23 @@ export default function EventDetailPage({
                 </span>
               </button>
 
-              <Badge variant="purple" className="text-xs py-0.5 px-2.5 font-bold">
-                {selectedPhotoIds.length} Selected
+              <Badge variant="lavender" className="text-xs py-0.5 px-3 font-extrabold">
+                {selectedPhotoIds.length} Selected ✨
               </Badge>
             </div>
 
             {/* Batch Action Buttons: Download Selected, Delete Selected, Cancel */}
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={() => handleDownloadZip(selectedPhotoIds)}
                 disabled={selectedPhotoIds.length === 0 || isDownloadingZip}
                 isLoading={isDownloadingZip}
-                className="flex-1 sm:flex-initial gap-1.5 text-xs h-9 px-3"
+                className="flex-1 sm:flex-initial gap-1.5 text-xs h-9 px-4"
                 title="Download selected photos as ZIP"
               >
-                <Download className="w-3.5 h-3.5" />
+                <Download className="w-3.5 h-3.5 text-amber-600" />
                 <span>Download ({selectedPhotoIds.length})</span>
               </Button>
 
@@ -626,7 +626,7 @@ export default function EventDetailPage({
                   size="sm"
                   onClick={() => setIsBatchDeleteModalOpen(true)}
                   disabled={selectedPhotoIds.length === 0}
-                  className="flex-1 sm:flex-initial gap-1.5 text-xs h-9 px-3 bg-red-600 hover:bg-red-700 text-white"
+                  className="flex-1 sm:flex-initial gap-1.5 text-xs h-9 px-4"
                   title="Delete selected photos"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -638,7 +638,7 @@ export default function EventDetailPage({
                 variant="ghost"
                 size="sm"
                 onClick={handleExitSelectionMode}
-                className="text-xs h-9 px-2 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                className="text-xs h-9 px-3 text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 rounded-full"
               >
                 Done
               </Button>

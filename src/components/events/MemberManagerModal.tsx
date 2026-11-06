@@ -157,78 +157,78 @@ export function MemberManagerModal({
 
         {/* Invite by Email (Owner only) */}
         {isOwner && (
-          <form onSubmit={handleAddMember} className="flex flex-col sm:flex-row items-end gap-3 rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
+          <form onSubmit={handleAddMember} className="flex flex-col sm:flex-row items-end gap-3 rounded-3xl border-2 border-purple-200/90 bg-purple-50/50 p-4.5 dark:border-purple-900/60 dark:bg-purple-950/30">
             <div className="flex-1 w-full">
               <Input
-                label="Invite Collaborator"
+                label="Invite Collaborator ✨"
                 type="email"
-                placeholder="colleague@example.com"
+                placeholder="friend@example.com"
                 value={emailInput}
                 onChange={(e) => setEmailInput(e.target.value)}
                 required
               />
             </div>
             <div className="w-full sm:w-32">
-              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1 block">Role</label>
+              <label className="text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1 block">Role</label>
               <select
                 value={roleInput}
                 onChange={(e) => setRoleInput(e.target.value as 'MEMBER' | 'OWNER')}
-                className="h-10 w-full rounded-lg border border-zinc-300 bg-white px-2.5 text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                className="h-11 w-full rounded-2xl border-2 border-stone-200 bg-white/90 px-3 text-xs font-bold text-stone-800 focus:outline-none focus:border-purple-400 dark:border-stone-750 dark:bg-stone-900 dark:text-stone-100 shadow-2xs"
               >
                 <option value="MEMBER">Member</option>
-                <option value="OWNER">Owner</option>
+                <option value="OWNER">Host/Owner</option>
               </select>
             </div>
-            <Button type="submit" size="md" variant="primary" isLoading={isLoading} className="w-full sm:w-auto">
+            <Button type="submit" size="md" variant="primary" isLoading={isLoading} className="w-full sm:w-auto px-6 h-11 shadow-xs">
               <UserPlus className="w-4 h-4 mr-1.5" />
-              Invite
+              <span>Invite</span>
             </Button>
           </form>
         )}
 
         {/* Members List */}
-        <div className="divide-y divide-zinc-100 dark:divide-zinc-800 max-h-72 overflow-y-auto">
+        <div className="divide-y divide-stone-150 dark:divide-stone-800 max-h-72 overflow-y-auto pr-1">
           {members.map((member) => {
             const isCurrentUser = member.user.id === currentUserId;
             return (
-              <div key={member.id} className="flex items-center justify-between py-3">
+              <div key={member.id} className="flex items-center justify-between py-3.5">
                 <div className="flex items-center gap-3">
                   {member.user.image ? (
                     <img
                       src={member.user.image}
                       alt={member.user.name || 'Member'}
-                      className="h-9 w-9 rounded-full object-cover border border-zinc-200 dark:border-zinc-700"
+                      className="h-10 w-10 rounded-full object-cover border-2 border-pink-300 ring-2 ring-purple-100 dark:border-pink-700"
                     />
                   ) : (
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 font-semibold text-xs dark:bg-indigo-950 dark:text-indigo-300">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-tr from-pink-200 to-purple-200 text-purple-700 font-black text-xs border border-purple-300">
                       {(member.user.name || member.user.email || 'U')[0].toUpperCase()}
                     </div>
                   )}
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                      <span className="text-sm font-bold text-stone-900 dark:text-stone-100">
                         {member.user.name || member.user.email}
                       </span>
                       {isCurrentUser && (
-                        <span className="text-[10px] bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 px-1.5 py-0.2 rounded-sm font-medium">
+                        <span className="text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 px-2 py-0.5 rounded-full font-bold">
                           You
                         </span>
                       )}
                     </div>
                     {member.user.email && (
-                      <p className="text-xs text-zinc-500">{member.user.email}</p>
+                      <p className="text-xs text-stone-500 font-medium">{member.user.email}</p>
                     )}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3">
                   {member.role === 'OWNER' ? (
-                    <Badge variant="purple">
-                      <ShieldCheck className="w-3 h-3 mr-1" />
-                      Owner
+                    <Badge variant="lavender" className="px-3 py-1">
+                      <ShieldCheck className="w-3 h-3 mr-1 text-purple-600" />
+                      Host
                     </Badge>
                   ) : (
-                    <Badge variant="primary">Member</Badge>
+                    <Badge variant="sky" className="px-3 py-1">Member</Badge>
                   )}
 
                   {isOwner && !isCurrentUser && (
@@ -236,7 +236,7 @@ export function MemberManagerModal({
                       variant="ghost"
                       size="sm"
                       onClick={() => handleRemoveMember(member.user.id)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 p-1.5 h-8 w-8"
+                      className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 p-1.5 h-8 w-8 rounded-full"
                       title="Remove member"
                     >
                       <UserMinus className="w-4 h-4" />

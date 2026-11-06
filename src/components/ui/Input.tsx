@@ -14,7 +14,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="w-full flex flex-col gap-1.5">
         {label && (
-          <label htmlFor={inputId} className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          <label htmlFor={inputId} className="text-xs font-semibold text-stone-700 dark:text-stone-300">
             {label}
           </label>
         )}
@@ -23,14 +23,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           type={type}
           ref={ref}
           className={cn(
-            'flex h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100',
-            error && 'border-red-500 focus:ring-red-500',
+            'flex h-11 w-full rounded-2xl border-2 border-stone-200 bg-white/90 px-4 py-2 text-sm text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-200/60 dark:border-stone-750 dark:bg-stone-900/90 dark:text-stone-100 transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50 shadow-2xs',
+            error && 'border-rose-400 focus:border-rose-500 focus:ring-rose-200',
             className
           )}
           {...props}
         />
-        {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
-        {helperText && !error && <p className="text-xs text-zinc-500">{helperText}</p>}
+        {error && <p className="text-xs text-rose-600 font-medium">{error}</p>}
+        {helperText && !error && <p className="text-xs text-stone-500">{helperText}</p>}
       </div>
     );
   }

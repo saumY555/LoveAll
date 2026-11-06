@@ -91,10 +91,10 @@ export function PhotoLightboxModal({
           {/* Resolution Mode Switcher: Fast Preview vs Full Resolution */}
           <button
             onClick={handleToggleFullRes}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer shadow-xs ${
               isFullRes
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs'
-                : 'bg-white/10 hover:bg-white/20 text-zinc-200 border border-white/10'
+                ? 'bg-amber-400 text-stone-950 border-2 border-amber-300 shadow-amber-400/20'
+                : 'bg-white/15 hover:bg-white/25 text-white border-2 border-white/20'
             }`}
             title={
               isFullRes
@@ -103,42 +103,42 @@ export function PhotoLightboxModal({
             }
           >
             {isFullResLoading ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-300" />
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-stone-950" />
             ) : isFullRes ? (
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <Sparkles className="w-3.5 h-3.5 text-stone-950" />
             ) : (
-              <Zap className="w-3.5 h-3.5 text-yellow-400" />
+              <Zap className="w-3.5 h-3.5 text-yellow-300" />
             )}
             <span className="hidden sm:inline">
-              {isFullRes ? 'Full Resolution' : 'Fast Preview'}
+              {isFullRes ? 'Full HD' : 'Fast Preview'}
             </span>
             <span
-              className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+              className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
                 isFullRes
-                  ? 'bg-amber-400 text-black'
-                  : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  ? 'bg-stone-900 text-white'
+                  : 'bg-emerald-500/30 text-emerald-300 border border-emerald-400/40'
               }`}
             >
               {isFullRes ? 'HD' : 'FAST'}
             </span>
           </button>
 
-          {/* Download Original Button (always highest quality uncompressed) */}
+          {/* Download Original Button */}
           <Button
             variant="secondary"
             size="sm"
             onClick={() => window.open(currentPhoto.downloadUrl, '_blank')}
-            className="gap-1.5 bg-white/10 hover:bg-white/20 text-white border-none cursor-pointer"
+            className="gap-1.5 bg-white/15 hover:bg-white/25 text-white border-2 border-white/20 cursor-pointer rounded-full h-8 px-3.5"
             title="Download full quality original file"
           >
-            <Download className="w-4 h-4" />
-            <span className="hidden md:inline">Download Original</span>
+            <Download className="w-3.5 h-3.5 text-pink-300" />
+            <span className="hidden md:inline">Original</span>
           </Button>
 
           {/* Close Lightbox */}
           <button
             onClick={onClose}
-            className="rounded-lg p-2 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            className="rounded-full p-2 text-stone-300 hover:text-white hover:bg-white/20 hover:rotate-90 transition-all cursor-pointer"
             title="Close (Esc)"
           >
             <X className="w-5 h-5" />

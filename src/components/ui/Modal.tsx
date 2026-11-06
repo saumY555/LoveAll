@@ -46,35 +46,40 @@ export function Modal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
+      {/* Playful soft backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
+        className="fixed inset-0 bg-stone-950/45 backdrop-blur-xs transition-opacity"
         onClick={onClose}
       />
 
       {/* Modal Dialog Content */}
       <div
         className={cn(
-          'relative w-full rounded-2xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 z-10 animate-in fade-in zoom-in-95 duration-150',
+          'relative w-full rounded-3xl bg-white/95 p-6 sm:p-7 shadow-2xl shadow-purple-950/10 dark:bg-stone-900/95 border-2 border-stone-200/90 dark:border-stone-800 z-10 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md',
           maxWidths[maxWidth]
         )}
       >
-        <div className="flex items-start justify-between pb-4">
+        <div className="flex items-start justify-between pb-4 border-b border-stone-150 dark:border-stone-800/80">
           <div>
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{title}</h2>
+            <h2 className="text-lg font-bold text-stone-900 dark:text-stone-100 flex items-center gap-2">
+              {title}
+            </h2>
             {description && (
-              <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">{description}</p>
+              <p className="text-xs text-stone-500 dark:text-stone-400 mt-1 leading-relaxed">
+                {description}
+              </p>
             )}
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+            aria-label="Close modal"
+            className="rounded-full p-2 text-stone-400 hover:text-pink-600 hover:bg-pink-50 dark:hover:bg-pink-950/40 dark:hover:text-pink-300 transition-all cursor-pointer hover:rotate-90 shrink-0"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="mt-2">{children}</div>
+        <div className="mt-4">{children}</div>
       </div>
     </div>
   );

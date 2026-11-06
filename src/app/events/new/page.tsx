@@ -70,22 +70,29 @@ export default function NewEventPage() {
     <div className="mx-auto max-w-2xl px-4 sm:px-6 py-10">
       <Link
         href="/events"
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 mb-6 transition-colors"
+        className="inline-flex items-center gap-2 text-xs font-bold text-stone-600 hover:text-stone-900 bg-white/80 hover:bg-white border border-stone-200/80 px-4 py-2 rounded-full mb-6 transition-all shadow-2xs hover:scale-[1.02] active:scale-[0.98] dark:bg-stone-900 dark:border-stone-800 dark:text-stone-300"
       >
-        <ArrowLeft className="w-4 h-4" />
+        <ArrowLeft className="w-4 h-4 text-purple-600" />
         Back to Events
       </Link>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-          Create a New Event
-        </h1>
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          Configure details, dates, and collaboration permissions for this event gallery.
-        </p>
+      <div className="rounded-3xl border-2 border-stone-200/90 bg-white/90 p-6 sm:p-8 shadow-sm backdrop-blur-md dark:border-stone-800 dark:bg-stone-900/90">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-400 to-pink-400 flex items-center justify-center text-white text-lg shadow-xs">
+            ✨
+          </div>
+          <div>
+            <h1 className="text-2xl font-black tracking-tight text-stone-900 dark:text-stone-100">
+              Create a New Event
+            </h1>
+            <p className="mt-0.5 text-xs font-medium text-stone-500 dark:text-stone-400">
+              Set up a shared photo space for your friends, trip, or gathering.
+            </p>
+          </div>
+        </div>
 
         {error && (
-          <div className="mt-4 rounded-lg bg-red-50 p-3 text-xs text-red-600 dark:bg-red-950/40 dark:text-red-400">
+          <div className="mt-5 rounded-2xl border border-red-200 bg-red-50/80 p-3.5 text-xs font-medium text-red-600 dark:bg-red-950/40 dark:text-red-400">
             {error}
           </div>
         )}
@@ -117,21 +124,21 @@ export default function NewEventPage() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            <label className="text-xs font-semibold text-stone-700 dark:text-stone-300">
               Description (optional)
             </label>
             <textarea
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Add details, itinerary, or welcome message..."
-              className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              placeholder="What memories will we make here?"
+              className="w-full rounded-2xl border-2 border-stone-200 bg-white/90 p-3.5 text-sm text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-200/60 dark:border-stone-750 dark:bg-stone-900/90 dark:text-stone-100 transition-all duration-150 shadow-2xs"
             />
           </div>
 
-          <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 dark:border-zinc-800 dark:bg-zinc-900/60 space-y-3">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-              Access & Sharing Permissions
+          <div className="rounded-3xl border-2 border-purple-200/90 bg-purple-50/50 p-5 dark:border-purple-900/60 dark:bg-purple-950/30 space-y-3.5">
+            <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+              Access & Sharing Permissions ✨
             </h4>
 
             <label className="flex items-center gap-3 cursor-pointer">
@@ -139,11 +146,11 @@ export default function NewEventPage() {
                 type="checkbox"
                 checked={isPrivate}
                 onChange={(e) => setIsPrivate(e.target.checked)}
-                className="h-4 w-4 rounded-sm border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4.5 w-4.5 rounded-md border-purple-300 text-purple-600 focus:ring-purple-400 accent-purple-600 cursor-pointer"
               />
               <div className="text-xs">
-                <span className="font-medium text-zinc-900 dark:text-zinc-100">Private Event</span>
-                <p className="text-zinc-500">Only invited members or guests with a valid link can view</p>
+                <span className="font-bold text-stone-900 dark:text-stone-100">Private Event</span>
+                <p className="text-stone-500 font-medium">Only invited members or guests with a valid passcode/link can view</p>
               </div>
             </label>
 
@@ -152,11 +159,11 @@ export default function NewEventPage() {
                 type="checkbox"
                 checked={allowGuestView}
                 onChange={(e) => setAllowGuestView(e.target.checked)}
-                className="h-4 w-4 rounded-sm border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4.5 w-4.5 rounded-md border-purple-300 text-purple-600 focus:ring-purple-400 accent-purple-600 cursor-pointer"
               />
               <div className="text-xs">
-                <span className="font-medium text-zinc-900 dark:text-zinc-100">Allow Guest Viewing</span>
-                <p className="text-zinc-500">Anyone with a share link can view photos without an account</p>
+                <span className="font-bold text-stone-900 dark:text-stone-100">Allow Guest Viewing</span>
+                <p className="text-stone-500 font-medium">Anyone with a share link or passcode can view photos without an account</p>
               </div>
             </label>
 
@@ -165,23 +172,23 @@ export default function NewEventPage() {
                 type="checkbox"
                 checked={allowGuestUpload}
                 onChange={(e) => setAllowGuestUpload(e.target.checked)}
-                className="h-4 w-4 rounded-sm border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4.5 w-4.5 rounded-md border-purple-300 text-purple-600 focus:ring-purple-400 accent-purple-600 cursor-pointer"
               />
               <div className="text-xs">
-                <span className="font-medium text-zinc-900 dark:text-zinc-100">Allow Guest Uploads</span>
-                <p className="text-zinc-500">Guests with a share link can upload photos directly</p>
+                <span className="font-bold text-stone-900 dark:text-stone-100">Allow Guest Uploads</span>
+                <p className="text-stone-500 font-medium">Guests with a share link can upload photos directly into the gallery</p>
               </div>
             </label>
           </div>
 
           <div className="flex justify-end gap-3 pt-3">
             <Link href="/events">
-              <Button type="button" variant="ghost" disabled={isLoading}>
+              <Button type="button" variant="ghost" disabled={isLoading} className="rounded-full">
                 Cancel
               </Button>
             </Link>
-            <Button type="submit" variant="primary" isLoading={isLoading}>
-              Create Event
+            <Button type="submit" variant="primary" isLoading={isLoading} className="px-6 shadow-sm">
+              Create Event 🎉
             </Button>
           </div>
         </form>

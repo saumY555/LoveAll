@@ -393,7 +393,7 @@ export function UploadDropzoneModal({
           tabIndex={-1}
         />
 
-        {/* Drag and Drop Zone button */}
+        {/* Drag and Drop Zone button with cute playful styling */}
         <div
           role="button"
           tabIndex={0}
@@ -408,21 +408,22 @@ export function UploadDropzoneModal({
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className={`relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 text-center cursor-pointer transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+          className={`relative flex flex-col items-center justify-center rounded-3xl border-2 border-dashed p-8 sm:p-10 text-center cursor-pointer transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-purple-400 ${
             isDragging
-              ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/30 scale-[1.01]'
-              : 'border-zinc-300 hover:border-zinc-400 bg-zinc-50/50 dark:border-zinc-700 dark:bg-zinc-900/50'
+              ? 'border-pink-500 bg-pink-50/80 dark:bg-pink-950/40 scale-[1.01]'
+              : 'border-purple-200 hover:border-purple-400 bg-gradient-to-br from-pink-50/30 via-purple-50/20 to-amber-50/20 dark:border-purple-900/60 dark:bg-stone-850 hover:bg-purple-50/40'
           }`}
         >
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400 mb-3 mx-auto pointer-events-none select-none">
-            <Upload className="h-6 w-6" />
+          <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-gradient-to-tr from-pink-500 via-purple-500 to-indigo-500 text-white shadow-md shadow-pink-500/20 mb-3 mx-auto pointer-events-none select-none animate-float">
+            <Upload className="h-7 w-7" />
           </div>
 
-          <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 pointer-events-none select-none">
-            Click to select photos or drag & drop here
+          <p className="text-sm font-bold text-stone-900 dark:text-stone-100 pointer-events-none select-none flex items-center justify-center gap-1.5">
+            <span>Click to select photos or drag & drop here</span>
+            <span className="text-pink-500">✨</span>
           </p>
-          <p className="mt-1 text-xs text-zinc-500 pointer-events-none select-none">
-            JPEG, PNG, WebP, HEIC up to 50MB per file. Multi-file upload supported.
+          <p className="mt-1 text-xs text-stone-500 pointer-events-none select-none font-medium">
+            JPEG, PNG, WebP, HEIC up to 50MB. High-res originals preserved safely.
           </p>
         </div>
 

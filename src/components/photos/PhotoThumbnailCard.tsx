@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Download, Trash2, Calendar, User as UserIcon, Check } from 'lucide-react';
+import { Download, Trash2, Check, Sparkles } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
 export interface GalleryPhoto {
@@ -100,16 +100,16 @@ export function PhotoThumbnailCard({
   return (
     <div
       onClick={handleClick}
-      className={`group relative flex flex-col overflow-hidden rounded-2xl bg-zinc-100 border transition-all duration-200 cursor-pointer dark:bg-zinc-800 aspect-square select-none ${
+      className={`group relative flex flex-col overflow-hidden rounded-3xl bg-stone-100 border-2 transition-all duration-200 cursor-pointer dark:bg-stone-800 aspect-square select-none hover:-translate-y-0.5 ${
         isSelected
-          ? 'ring-3 ring-indigo-600 dark:ring-indigo-500 border-indigo-500 scale-[0.98] shadow-md'
-          : 'border-zinc-200/80 hover:shadow-md hover:border-zinc-300 dark:border-zinc-700/80 dark:hover:border-zinc-600'
+          ? 'ring-4 ring-pink-400 border-pink-400 scale-[0.98] shadow-lg shadow-pink-500/15'
+          : 'border-stone-200/80 hover:shadow-md hover:border-purple-300 dark:border-stone-750 dark:hover:border-purple-700'
       }`}
     >
-      {/* Selection Badge: always visible in selection mode; on hover/tap in normal mode */}
+      {/* Cute Selection Badge */}
       <div
         onClick={handleSelectBadgeClick}
-        className={`absolute top-2 left-2 z-20 transition-all duration-150 ${
+        className={`absolute top-2.5 left-2.5 z-20 transition-all duration-150 ${
           isSelectionMode || isSelected
             ? 'opacity-100 scale-100'
             : 'opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100'
@@ -118,19 +118,19 @@ export function PhotoThumbnailCard({
         <button
           type="button"
           aria-label={isSelected ? 'Deselect photo' : 'Select photo'}
-          className={`h-7 w-7 rounded-full flex items-center justify-center transition-all shadow-sm ${
+          className={`h-7.5 w-7.5 rounded-full flex items-center justify-center transition-all cursor-pointer ${
             isSelected
-              ? 'bg-indigo-600 text-white ring-2 ring-white dark:ring-zinc-900 scale-105'
-              : 'bg-black/35 backdrop-blur-md border border-white/80 hover:bg-black/50 text-transparent'
+              ? 'bg-gradient-to-tr from-pink-500 to-purple-500 text-white shadow-md shadow-pink-500/30 scale-105 ring-2 ring-white dark:ring-stone-900'
+              : 'bg-stone-900/50 backdrop-blur-md border-2 border-white/90 hover:bg-stone-900/70 text-transparent'
           }`}
         >
           <Check className={`w-4 h-4 stroke-[3] ${isSelected ? 'opacity-100' : 'opacity-0'}`} />
         </button>
       </div>
 
-      {/* Selected tint overlay */}
+      {/* Selected tint overlay with soft pink glow */}
       {isSelected && (
-        <div className="absolute inset-0 bg-indigo-600/15 z-10 pointer-events-none" />
+        <div className="absolute inset-0 bg-pink-500/12 z-10 pointer-events-none" />
       )}
 
       {/* Thumbnail Image */}
@@ -146,16 +146,16 @@ export function PhotoThumbnailCard({
 
       {/* Loading Skeleton */}
       {!imageLoaded && (
-        <div className="absolute inset-0 bg-zinc-200 animate-pulse dark:bg-zinc-800" />
+        <div className="absolute inset-0 bg-gradient-to-br from-pink-50 via-purple-50 to-amber-50 animate-pulse dark:from-stone-800 dark:to-stone-750" />
       )}
 
       {/* Top Right Actions (Download & Single Delete - hidden in selection mode) */}
       {!isSelectionMode && (
-        <div className="absolute top-2 right-2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-20">
+        <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-20">
           <button
             onClick={handleDownload}
             title="Download original"
-            className="rounded-lg bg-black/60 backdrop-blur-md p-1.5 text-white hover:bg-black/80 transition-colors cursor-pointer"
+            className="rounded-full bg-stone-900/60 backdrop-blur-md p-2 text-white hover:bg-stone-900/85 hover:scale-110 transition-all cursor-pointer shadow-xs"
           >
             <Download className="w-3.5 h-3.5" />
           </button>
@@ -165,7 +165,7 @@ export function PhotoThumbnailCard({
               onClick={handleDelete}
               disabled={isDeleting}
               title="Delete photo"
-              className="rounded-lg bg-red-600/80 backdrop-blur-md p-1.5 text-white hover:bg-red-700 transition-colors cursor-pointer"
+              className="rounded-full bg-rose-600/80 backdrop-blur-md p-2 text-white hover:bg-rose-600 hover:scale-110 transition-all cursor-pointer shadow-xs"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -174,27 +174,14 @@ export function PhotoThumbnailCard({
       )}
 
       {/* Bottom Metadata Overlay */}
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2.5 pt-6 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-10 pointer-events-none">
-        <div className="flex items-center justify-between text-[11px]">
-          {/* Uploader */}
-          <div className="flex items-center gap-1.5 truncate max-w-[65%]">
-            {photo.primaryUploader.image ? (
-              <img
-                src={photo.primaryUploader.image}
-                alt=""
-                className="h-4 w-4 rounded-full object-cover"
-              />
-            ) : (
-              <UserIcon className="h-3.5 w-3.5 text-zinc-300" />
-            )}
-            <span className="truncate">{photo.primaryUploader.name}</span>
-          </div>
-
-          {/* Date */}
-          <div className="flex items-center gap-1 text-[10px] text-zinc-300">
-            <Calendar className="w-3 h-3" />
-            <span>{formatDate(displayDate)}</span>
-          </div>
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-stone-950/85 via-stone-950/40 to-transparent p-3 pt-7 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-10 pointer-events-none">
+        <div className="flex items-center justify-between text-[11px] font-medium">
+          <span className="truncate max-w-[70%]">
+            {photo.primaryUploader.name || 'Anonymous'}
+          </span>
+          <span className="text-stone-300 text-[10px]">
+            {formatDate(displayDate)}
+          </span>
         </div>
       </div>
     </div>

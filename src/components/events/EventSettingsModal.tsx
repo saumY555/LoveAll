@@ -175,21 +175,21 @@ export function EventSettingsModal({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            <label className="text-xs font-semibold text-stone-700 dark:text-stone-300">
               Description
             </label>
             <textarea
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 bg-white p-2.5 text-xs placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              className="w-full rounded-2xl border-2 border-stone-200 bg-white/90 p-3 text-xs text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-200 dark:border-stone-750 dark:bg-stone-900 dark:text-stone-100 transition-all shadow-2xs"
             />
           </div>
 
           {/* Access & Sharing Permissions */}
-          <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 dark:border-zinc-800 dark:bg-zinc-900/60 space-y-3">
-            <h4 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-              Access & Sharing Permissions
+          <div className="rounded-3xl border-2 border-purple-200/90 bg-purple-50/50 p-4.5 dark:border-purple-900/60 dark:bg-purple-950/30 space-y-3.5">
+            <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+              Access & Sharing Permissions ✨
             </h4>
 
             <label className="flex items-center gap-3 cursor-pointer">
@@ -197,11 +197,11 @@ export function EventSettingsModal({
                 type="checkbox"
                 checked={isPrivate}
                 onChange={(e) => setIsPrivate(e.target.checked)}
-                className="h-4 w-4 rounded-sm border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4.5 w-4.5 rounded-md border-purple-300 text-purple-600 focus:ring-purple-400 accent-purple-600 cursor-pointer"
               />
               <div className="text-xs">
-                <span className="font-medium text-zinc-900 dark:text-zinc-100">Private Event</span>
-                <p className="text-zinc-500 text-[11px]">Only invited members can access without an authorized link</p>
+                <span className="font-bold text-stone-900 dark:text-stone-100">Private Event</span>
+                <p className="text-stone-500 font-medium text-[11px]">Only invited members can access without an authorized passcode</p>
               </div>
             </label>
 
@@ -210,11 +210,11 @@ export function EventSettingsModal({
                 type="checkbox"
                 checked={allowGuestView}
                 onChange={(e) => setAllowGuestView(e.target.checked)}
-                className="h-4 w-4 rounded-sm border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4.5 w-4.5 rounded-md border-purple-300 text-purple-600 focus:ring-purple-400 accent-purple-600 cursor-pointer"
               />
               <div className="text-xs">
-                <span className="font-medium text-zinc-900 dark:text-zinc-100">Allow Guest Viewing</span>
-                <p className="text-zinc-500 text-[11px]">Shareable link visitors can view without an account</p>
+                <span className="font-bold text-stone-900 dark:text-stone-100">Allow Guest Viewing</span>
+                <p className="text-stone-500 font-medium text-[11px]">Passcode or share link visitors can view without an account</p>
               </div>
             </label>
 
@@ -223,21 +223,21 @@ export function EventSettingsModal({
                 type="checkbox"
                 checked={allowGuestUpload}
                 onChange={(e) => setAllowGuestUpload(e.target.checked)}
-                className="h-4 w-4 rounded-sm border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4.5 w-4.5 rounded-md border-purple-300 text-purple-600 focus:ring-purple-400 accent-purple-600 cursor-pointer"
               />
               <div className="text-xs">
-                <span className="font-medium text-zinc-900 dark:text-zinc-100">Allow Guest Uploads</span>
-                <p className="text-zinc-500 text-[11px]">Shareable link visitors can contribute photos</p>
+                <span className="font-bold text-stone-900 dark:text-stone-100">Allow Guest Uploads</span>
+                <p className="text-stone-500 font-medium text-[11px]">Passcode or share link visitors can contribute photos</p>
               </div>
             </label>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+            <Button type="button" variant="ghost" size="sm" onClick={onClose} className="rounded-full">
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm" isLoading={isSaving}>
-              Save Settings
+            <Button type="submit" variant="primary" size="sm" isLoading={isSaving} className="px-6 shadow-sm">
+              Save Settings ✨
             </Button>
           </div>
         </form>

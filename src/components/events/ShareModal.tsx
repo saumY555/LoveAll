@@ -223,47 +223,47 @@ export function ShareModal({
 
         {/* Top Active QR & Link Card (if any active link exists) */}
         {latestToken ? (
-          <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/70 via-white to-purple-50/50 p-5 dark:border-indigo-950/60 dark:from-indigo-950/20 dark:via-zinc-900 dark:to-purple-950/20 shadow-xs space-y-4">
+          <div className="rounded-3xl border-2 border-purple-200/90 bg-gradient-to-br from-pink-50/70 via-purple-50/50 to-sky-50/40 p-6 dark:border-purple-900/60 dark:from-purple-950/20 dark:via-stone-900 dark:to-pink-950/20 shadow-sm space-y-4">
             {/* Prominent Event Passcode Display */}
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-white dark:bg-zinc-800 border border-indigo-200 dark:border-indigo-800/60 shadow-2xs">
+            <div className="flex items-center justify-between p-4 rounded-2xl bg-white dark:bg-stone-800 border-2 border-purple-200 dark:border-purple-800/60 shadow-xs">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400 shrink-0">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-pink-400 to-purple-500 text-white shrink-0 shadow-xs">
                   <KeyRound className="h-5 w-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 block">
-                    Event Passcode (Join Code)
+                  <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 dark:text-purple-300 block">
+                    Event Passcode (Guest Code)
                   </span>
-                  <span className="text-xl font-mono font-extrabold tracking-wider text-zinc-900 dark:text-zinc-100">
+                  <span className="text-2xl font-mono font-black tracking-widest text-stone-900 dark:text-stone-100">
                     {latestToken}
                   </span>
                 </div>
               </div>
 
               <Button
-                variant="outline"
+                variant="primary"
                 size="sm"
                 onClick={handleCopyPasscode}
-                className="gap-1.5 text-xs h-9 px-3"
+                className="gap-1.5 text-xs h-9 px-4 shadow-xs"
               >
-                {copiedPasscode ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedPasscode ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copiedPasscode ? 'Copied!' : 'Copy Code'}</span>
               </Button>
             </div>
 
             <div className="flex flex-col sm:flex-row items-center gap-6">
               {/* QR Code Canvas/Image */}
-              <div className="flex flex-col items-center gap-2">
-                <div className="p-2.5 bg-white rounded-xl shadow-xs border border-zinc-200 dark:border-zinc-700">
+              <div className="flex flex-col items-center gap-2.5">
+                <div className="p-3 bg-white rounded-2xl shadow-sm border-2 border-purple-200 dark:border-purple-800">
                   {qrDataUrl ? (
                     <img
                       src={qrDataUrl}
                       alt="Event QR Code"
-                      className="h-32 w-32 rounded-lg object-contain"
+                      className="h-32 w-32 rounded-xl object-contain"
                     />
                   ) : (
-                    <div className="h-32 w-32 flex items-center justify-center text-zinc-400">
-                      <Loader2 className="w-6 h-6 animate-spin" />
+                    <div className="h-32 w-32 flex items-center justify-center text-stone-400">
+                      <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
                     </div>
                   )}
                 </div>
@@ -272,21 +272,21 @@ export function ShareModal({
                   variant="outline"
                   size="sm"
                   onClick={handleDownloadQr}
-                  className="gap-1.5 text-xs h-7 px-2.5 border-zinc-300 dark:border-zinc-700 cursor-pointer"
+                  className="gap-1.5 text-xs h-8 px-3 border-stone-200 dark:border-stone-700 cursor-pointer rounded-full"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  Save QR Image
+                  <Download className="w-3.5 h-3.5 text-purple-500" />
+                  <span>Save QR Image</span>
                 </Button>
               </div>
 
               {/* Link Details and Copy Button */}
               <div className="flex-1 w-full space-y-3 text-left">
                 <div>
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
                     Direct Guest Link
                   </span>
-                  <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
-                    Opening this link or scanning the QR code grants instant guest access without requiring sign-in.
+                  <p className="text-xs text-stone-600 dark:text-stone-400 mt-0.5 leading-relaxed">
+                    Opening this link or scanning the QR code grants instant guest access without requiring an account.
                   </p>
                 </div>
 
@@ -295,26 +295,26 @@ export function ShareModal({
                     type="text"
                     readOnly
                     value={getFullShareUrl(latestToken)}
-                    className="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-mono text-zinc-800 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 focus:outline-none select-all"
+                    className="flex-1 rounded-2xl border-2 border-stone-200 bg-white px-3.5 py-2 text-xs font-mono text-stone-800 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 focus:outline-none select-all"
                   />
                   <Button
-                    variant="primary"
+                    variant="secondary"
                     size="sm"
                     onClick={handleCopyLink}
-                    className="gap-1.5 shrink-0 cursor-pointer"
+                    className="gap-1.5 shrink-0 cursor-pointer h-9 px-3.5"
                   >
-                    {copiedLink ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                     <span>{copiedLink ? 'Copied!' : 'Copy Link'}</span>
                   </Button>
                 </div>
 
-                <div className="flex items-center gap-2 text-[11px] text-zinc-500">
-                  <span className="flex items-center gap-1">
-                    <Eye className="w-3.5 h-3.5 text-emerald-600" /> Guest View Enabled
+                <div className="flex items-center gap-2 text-[11px] text-stone-500 font-semibold">
+                  <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
+                    <Eye className="w-3.5 h-3.5" /> Guest View Enabled
                   </span>
                   <span>•</span>
-                  <span className="flex items-center gap-1">
-                    <UploadCloud className="w-3.5 h-3.5 text-indigo-600" /> Guest Uploads Enabled
+                  <span className="flex items-center gap-1 text-purple-700 dark:text-purple-400">
+                    <UploadCloud className="w-3.5 h-3.5" /> Guest Uploads Enabled
                   </span>
                 </div>
               </div>
@@ -322,13 +322,13 @@ export function ShareModal({
           </div>
         ) : (
           !isLoading && (
-            <div className="rounded-xl border border-dashed border-zinc-300 p-6 text-center dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/30">
-              <QrIcon className="w-8 h-8 mx-auto text-zinc-400 mb-2" />
-              <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            <div className="rounded-3xl border-2 border-dashed border-purple-200 p-8 text-center dark:border-purple-800 bg-purple-50/30">
+              <QrIcon className="w-9 h-9 mx-auto text-purple-400 mb-2" />
+              <p className="text-xs font-bold text-stone-700 dark:text-stone-300">
                 No active passcode or share link yet
               </p>
-              <p className="text-[11px] text-zinc-500 mt-0.5">
-                Generate a passcode below so guests can view the gallery directly.
+              <p className="text-[11px] text-stone-500 mt-0.5">
+                Generate a passcode below so guests can view the gallery directly!
               </p>
             </div>
           )
