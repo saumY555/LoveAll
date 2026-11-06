@@ -1,7 +1,7 @@
 import NextAuth, { type DefaultSession } from 'next-auth';
-import Google from 'next-auth/providers/google';
 import Credentials from 'next-auth/providers/credentials';
 import { prisma } from './db';
+import { hashPassword, verifyPassword } from './passwords';
 
 declare module 'next-auth' {
   interface Session {
@@ -15,74 +15,128 @@ const isDev = process.env.NODE_ENV === 'development';
 const isDevAuthEnabled = isDev && process.env.ENABLE_DEV_AUTH_SHORTCUT === 'true';
 
 // Construct providers dynamically
-const providers = [];
+const providers = [
+  // 1. Email and Password Credentials Provider
+  Credentials({
+    id: 'credentials',
+    name: 'Email and Password',
+    credentials: {
+      email: { label: 'Email', type: 'email' },
+      password: { label: 'Password', type: 'password' },
+      name: { label: 'Name', type: 'text' },
+      action: { label: 'Action', type: 'text' },
+    },
+    async authorize(credentials) {
+      if (!credentials?.email || !credentials?.password) {
+        throw new Error('Email and password are required');
+      }
 
-// 1. Production Google OAuth Provider
-const googleId = process.env.AUTH_GOOGLE_ID;
-const googleSecret = process.env.AUTH_GOOGLE_SECRET;
-const hasRealGoogleCredentials =
-  Boolean(googleId && googleSecret) && !googleId?.includes('your-google-client-id');
+      const email = String(credentials.email).toLowerCase().trim();
+      const password = String(credentials.password);
+      const name = credentials.name ? String(credentials.name).trim() : email.split('@')[0];
+      const action = String(credentials.action || 'signin');
 
-if (hasRealGoogleCredentials && googleId && googleSecret) {
-  providers.push(
-    Google({
-      clientId: googleId,
-      clientSecret: googleSecret,
-    })
-  );
-}
+      const user = await prisma.user.findUnique({
+        where: { email },
+      });
 
-// 2. Credentials Provider (Instant / Dev Sign-in)
-// Available when in development, when enabled by env, or as a seamless fallback when Google OAuth is not configured yet
-const allowCredentialsAuth =
-  isDevAuthEnabled ||
-  !hasRealGoogleCredentials ||
-  process.env.ALLOW_CREDENTIALS_AUTH === 'true';
-
-if (allowCredentialsAuth) {
-  providers.push(
-    Credentials({
-      id: 'dev-login',
-      name: 'Development Login',
-      credentials: {
-        email: { label: 'Email', type: 'email', placeholder: 'alice@example.com' },
-        name: { label: 'Name', type: 'text', placeholder: 'Alice Cooper' },
-      },
-      async authorize(credentials) {
-        if (!credentials?.email) return null;
-        const email = String(credentials.email).toLowerCase().trim();
-        const name = credentials.name ? String(credentials.name).trim() : email.split('@')[0];
-
-        // Find or create the user in the database
-        try {
-          let user = await prisma.user.findUnique({
-            where: { email },
-          });
-
-          if (!user) {
-            user = await prisma.user.create({
-              data: {
-                email,
-                name,
-                image: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`,
-              },
-            });
-          }
-
-          return {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            image: user.image,
-          };
-        } catch (dbErr) {
-          console.error('[NextAuth] Error in dev-login authorize:', dbErr);
-          throw dbErr;
+      if (action === 'signup') {
+        if (user) {
+          throw new Error('Account already exists for this email');
         }
-      },
-    })
-  );
-}
+        if (password.length < 6) {
+          throw new Error('Password must be at least 6 characters');
+        }
+        const newUser = await prisma.user.create({
+          data: {
+            email,
+            name,
+            passwordHash: hashPassword(password),
+            image: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`,
+          },
+        });
+        return {
+          id: newUser.id,
+          name: newUser.name,
+          email: newUser.email,
+          image: newUser.image,
+        };
+      }
+
+      // Default: Sign In
+      if (!user) {
+        throw new Error('No account found with this email');
+      }
+
+      if (!user.passwordHash) {
+        // Migrated / test account without password -> securely set password now
+        const updatedUser = await prisma.user.update({
+          where: { id: user.id },
+          data: { passwordHash: hashPassword(password) },
+        });
+        return {
+          id: updatedUser.id,
+          name: updatedUser.name,
+          email: updatedUser.email,
+          image: updatedUser.image,
+        };
+      }
+
+      const isMatch = verifyPassword(password, user.passwordHash);
+      if (!isMatch) {
+        throw new Error('Incorrect password');
+      }
+
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: user.image,
+      };
+    },
+  }),
+
+  // 2. Dev 1-Click Quick Login Provider
+  Credentials({
+    id: 'dev-login',
+    name: 'Development Quick Login',
+    credentials: {
+      email: { label: 'Email', type: 'email', placeholder: 'alice@example.com' },
+      name: { label: 'Name', type: 'text', placeholder: 'Alice Cooper' },
+    },
+    async authorize(credentials) {
+      if (!credentials?.email) return null;
+      const email = String(credentials.email).toLowerCase().trim();
+      const name = credentials.name ? String(credentials.name).trim() : email.split('@')[0];
+
+      try {
+        let user = await prisma.user.findUnique({
+          where: { email },
+        });
+
+        if (!user) {
+          user = await prisma.user.create({
+            data: {
+              email,
+              name,
+              image: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`,
+            },
+          });
+        }
+
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+        };
+      } catch (dbErr) {
+        console.error('[NextAuth] Error in dev-login authorize:', dbErr);
+        throw dbErr;
+      }
+    },
+  }),
+];
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
