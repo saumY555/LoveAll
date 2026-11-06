@@ -17,6 +17,7 @@
     "@neondatabase/serverless": "^1.2.0",
     "@prisma/adapter-neon": "^7.10.1",
     "@prisma/client": "6.4.1",
+    "archiver": "^8.0.0",
     "clsx": "^2.1.1",
     "lucide-react": "^1.67.0",
     "next": "16.4.4",
@@ -31,6 +32,7 @@
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
+    "@types/archiver": "^8.0.0",
     "@types/node": "^20",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",

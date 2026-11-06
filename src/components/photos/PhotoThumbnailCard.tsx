@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Download, Trash2, Calendar, User as UserIcon } from 'lucide-react';
+import { Download, Trash2, Calendar, User as UserIcon, Check } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
 export interface GalleryPhoto {
@@ -35,6 +35,9 @@ interface PhotoThumbnailCardProps {
   currentUserId?: string;
   onPhotoClick: (photo: GalleryPhoto) => void;
   onPhotoDeleted: (photoId: string) => void;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (photoId: string) => void;
 }
 
 export function PhotoThumbnailCard({
@@ -43,11 +46,28 @@ export function PhotoThumbnailCard({
   currentUserId,
   onPhotoClick,
   onPhotoDeleted,
+  isSelectionMode = false,
+  isSelected = false,
+  onToggleSelect,
 }: PhotoThumbnailCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
 
   const canDelete = isOwner || (currentUserId && photo.primaryUploader.id === currentUserId);
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (isSelectionMode) {
+      e.preventDefault();
+      onToggleSelect?.(photo.id);
+    } else {
+      onPhotoClick(photo);
+    }
+  };
+
+  const handleSelectBadgeClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggleSelect?.(photo.id);
+  };
 
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -79,9 +99,40 @@ export function PhotoThumbnailCard({
 
   return (
     <div
-      onClick={() => onPhotoClick(photo)}
-      className="group relative flex flex-col overflow-hidden rounded-2xl bg-zinc-100 border border-zinc-200/80 shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer dark:bg-zinc-800 dark:border-zinc-700/80 aspect-square"
+      onClick={handleClick}
+      className={`group relative flex flex-col overflow-hidden rounded-2xl bg-zinc-100 border transition-all duration-200 cursor-pointer dark:bg-zinc-800 aspect-square select-none ${
+        isSelected
+          ? 'ring-3 ring-indigo-600 dark:ring-indigo-500 border-indigo-500 scale-[0.98] shadow-md'
+          : 'border-zinc-200/80 hover:shadow-md hover:border-zinc-300 dark:border-zinc-700/80 dark:hover:border-zinc-600'
+      }`}
     >
+      {/* Selection Badge: always visible in selection mode; on hover/tap in normal mode */}
+      <div
+        onClick={handleSelectBadgeClick}
+        className={`absolute top-2 left-2 z-20 transition-all duration-150 ${
+          isSelectionMode || isSelected
+            ? 'opacity-100 scale-100'
+            : 'opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100'
+        }`}
+      >
+        <button
+          type="button"
+          aria-label={isSelected ? 'Deselect photo' : 'Select photo'}
+          className={`h-7 w-7 rounded-full flex items-center justify-center transition-all shadow-sm ${
+            isSelected
+              ? 'bg-indigo-600 text-white ring-2 ring-white dark:ring-zinc-900 scale-105'
+              : 'bg-black/35 backdrop-blur-md border border-white/80 hover:bg-black/50 text-transparent'
+          }`}
+        >
+          <Check className={`w-4 h-4 stroke-[3] ${isSelected ? 'opacity-100' : 'opacity-0'}`} />
+        </button>
+      </div>
+
+      {/* Selected tint overlay */}
+      {isSelected && (
+        <div className="absolute inset-0 bg-indigo-600/15 z-10 pointer-events-none" />
+      )}
+
       {/* Thumbnail Image */}
       <img
         src={photo.thumbnailUrl}
@@ -98,30 +149,32 @@ export function PhotoThumbnailCard({
         <div className="absolute inset-0 bg-zinc-200 animate-pulse dark:bg-zinc-800" />
       )}
 
-      {/* Top Overlay Actions: Download & Delete */}
-      <div className="absolute top-2 right-2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-10">
-        <button
-          onClick={handleDownload}
-          title="Download original"
-          className="rounded-lg bg-black/60 backdrop-blur-md p-1.5 text-white hover:bg-black/80 transition-colors cursor-pointer"
-        >
-          <Download className="w-3.5 h-3.5" />
-        </button>
-
-        {canDelete && (
+      {/* Top Right Actions (Download & Single Delete - hidden in selection mode) */}
+      {!isSelectionMode && (
+        <div className="absolute top-2 right-2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-20">
           <button
-            onClick={handleDelete}
-            disabled={isDeleting}
-            title="Delete photo"
-            className="rounded-lg bg-red-600/80 backdrop-blur-md p-1.5 text-white hover:bg-red-700 transition-colors cursor-pointer"
+            onClick={handleDownload}
+            title="Download original"
+            className="rounded-lg bg-black/60 backdrop-blur-md p-1.5 text-white hover:bg-black/80 transition-colors cursor-pointer"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <Download className="w-3.5 h-3.5" />
           </button>
-        )}
-      </div>
+
+          {canDelete && (
+            <button
+              onClick={handleDelete}
+              disabled={isDeleting}
+              title="Delete photo"
+              className="rounded-lg bg-red-600/80 backdrop-blur-md p-1.5 text-white hover:bg-red-700 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Bottom Metadata Overlay */}
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2.5 pt-6 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2.5 pt-6 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-10 pointer-events-none">
         <div className="flex items-center justify-between text-[11px]">
           {/* Uploader */}
           <div className="flex items-center gap-1.5 truncate max-w-[65%]">

@@ -223,7 +223,7 @@ export function PhotoLightboxModal({
         </div>
 
         {/* Speed & Resolution Indicator */}
-        <div className="flex items-center gap-4 text-zinc-400">
+        <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 sm:gap-4 text-zinc-400 text-[11px] sm:text-xs">
           <div className="flex items-center gap-1.5">
             {isFullRes ? (
               <span className="inline-flex items-center gap-1 text-amber-300 font-medium">

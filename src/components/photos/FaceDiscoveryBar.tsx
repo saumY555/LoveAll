@@ -439,7 +439,7 @@ export function FaceDiscoveryBar({
       ) : null}
 
       {/* Horizontal Carousel of People Filter Chips */}
-      <div className="mt-3.5 flex items-center gap-3 overflow-x-auto pb-1 scrollbar-thin">
+      <div className="mt-3.5 flex items-center gap-2.5 sm:gap-3 overflow-x-auto pb-2 scrollbar-none overscroll-x-contain touch-pan-x">
         {/* Everyone (All Photos) */}
         <button
           onClick={() => onClearPeople ? onClearPeople() : onSelectPerson?.(null)}

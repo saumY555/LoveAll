@@ -16,6 +16,12 @@ import {
   Lock,
   Share2,
   Layers,
+  Download,
+  Trash2,
+  CheckSquare,
+  Square,
+  X,
+  Check,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -29,6 +35,7 @@ import {
 } from '@/components/photos/PhotoThumbnailCard';
 import { PhotoLightboxModal } from '@/components/photos/PhotoLightboxModal';
 import { FaceDiscoveryBar } from '@/components/photos/FaceDiscoveryBar';
+import { BatchDeleteModal } from '@/components/photos/BatchDeleteModal';
 import { formatDate } from '@/lib/utils';
 import { EventWithRole } from '@/types';
 
@@ -47,6 +54,13 @@ export default function EventDetailPage({
   const [isPhotosLoading, setIsPhotosLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Selection & Batch Operations State
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
+  const [isBatchDeleteModalOpen, setIsBatchDeleteModalOpen] = useState(false);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+
+  // Modals
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -74,6 +88,69 @@ export default function EventDetailPage({
 
   const handleSelectOtherPhotos = () => {
     setSelectedPersonIds(['none']);
+  };
+
+  // Toggle selection for an individual photo
+  const handleToggleSelectPhoto = (photoId: string) => {
+    if (!isSelectionMode) {
+      setIsSelectionMode(true);
+      setSelectedPhotoIds([photoId]);
+      return;
+    }
+
+    setSelectedPhotoIds((prev) =>
+      prev.includes(photoId) ? prev.filter((id) => id !== photoId) : [...prev, photoId]
+    );
+  };
+
+  // Select / Deselect all visible photos
+  const handleSelectAll = () => {
+    if (selectedPhotoIds.length === photos.length) {
+      setSelectedPhotoIds([]);
+    } else {
+      setSelectedPhotoIds(photos.map((p) => p.id));
+    }
+  };
+
+  // Exit selection mode
+  const handleExitSelectionMode = () => {
+    setIsSelectionMode(false);
+    setSelectedPhotoIds([]);
+  };
+
+  // Trigger ZIP download for either:
+  // 1. Explicitly selected photo IDs, or
+  // 2. Active face filter, or
+  // 3. All event photos
+  const handleDownloadZip = async (photoIdsToDownload?: string[]) => {
+    setIsDownloadingZip(true);
+    try {
+      const query = new URLSearchParams();
+
+      if (photoIdsToDownload && photoIdsToDownload.length > 0) {
+        query.set('photoIds', photoIdsToDownload.join(','));
+      } else if (selectedPersonIds.length > 0) {
+        query.set('personIds', selectedPersonIds.join(','));
+        if (selectedPersonIds.length > 1) {
+          query.set('mode', filterMode);
+        }
+      }
+
+      const queryString = query.toString();
+      const downloadUrl = `/api/events/${eventId}/photos/download${queryString ? `?${queryString}` : ''}`;
+
+      // Trigger browser download via invisible link
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = '';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err: unknown) {
+      alert((err as Error).message || 'Failed to download ZIP archive');
+    } finally {
+      setTimeout(() => setIsDownloadingZip(false), 2000);
+    }
   };
 
   // Load Event Details & Photos concurrently in parallel
@@ -168,163 +245,147 @@ export default function EventDetailPage({
   const canUpload = !!event.userRole || (event.isGuest ? !!event.canGuestUpload : event.allowGuestUpload);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <div className={`mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 py-4 sm:py-8 ${isSelectionMode ? 'pb-28' : ''}`}>
       {/* Top back navigation */}
-      <Link
-        href="/events"
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 mb-6 transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to Events
-      </Link>
+      <div className="flex items-center justify-between mb-4 sm:mb-6">
+        <Link
+          href="/events"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>All Events</span>
+        </Link>
 
-      {/* Guest Notice Banner */}
-      {event.isGuest && (
-        <div className="mb-6 rounded-2xl border border-indigo-200 bg-indigo-50/80 p-4 dark:border-indigo-900/50 dark:bg-indigo-950/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white font-bold text-sm shadow-xs">
-              {event.guestIdentity?.displayName?.[0]?.toUpperCase() || 'G'}
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                Viewing as Guest: <span className="text-indigo-600 dark:text-indigo-400">{event.guestIdentity?.displayName || 'Anonymous Guest'}</span>
-              </p>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                {event.canGuestUpload
-                  ? 'You have upload permissions enabled. You can upload photos directly to this gallery.'
-                  : 'You have view-only access for this event gallery.'}
-              </p>
-            </div>
-          </div>
-          <Badge variant={event.canGuestUpload ? 'success' : 'default'} className="self-start sm:self-auto shrink-0 text-xs py-1 px-3">
-            {event.canGuestUpload ? 'Upload Allowed' : 'View Only'}
+        {/* Guest Badge if applicable */}
+        {event.isGuest && (
+          <Badge variant={event.canGuestUpload ? 'success' : 'default'} className="text-[11px] py-0.5 px-2.5">
+            Guest: {event.guestIdentity?.displayName || 'Visitor'}
           </Badge>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Event Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+      {/* Modern Responsive Event Header Card */}
+      <div className="relative overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900 transition-all">
         {event.coverImage && (
-          <div className="relative h-48 sm:h-64 w-full overflow-hidden">
+          <div className="relative h-40 sm:h-60 w-full overflow-hidden">
             <img
               src={event.coverImage}
               alt={event.name}
               className="h-full w-full object-cover"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent" />
           </div>
         )}
 
-        <div className="p-6 sm:p-8">
-          <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-100">
+        <div className="p-4 sm:p-7">
+          <div className="flex flex-col gap-4">
+            {/* Title & Role Row */}
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-100">
                   {event.name}
                 </h1>
-
                 {isOwner ? (
-                  <Badge variant="purple" className="py-1">
+                  <Badge variant="purple" className="py-0.5 text-[11px]">
                     <ShieldCheck className="w-3.5 h-3.5 mr-1" />
-                    You are Owner
+                    Owner
                   </Badge>
                 ) : event.userRole === 'MEMBER' ? (
-                  <Badge variant="primary" className="py-1">
+                  <Badge variant="primary" className="py-0.5 text-[11px]">
                     Member
                   </Badge>
-                ) : (
-                  <Badge variant="default" className="py-1">
-                    Guest View
-                  </Badge>
-                )}
+                ) : null}
               </div>
 
-              {event.description && (
-                <p className="text-sm text-zinc-600 dark:text-zinc-400 max-w-3xl">
-                  {event.description}
-                </p>
-              )}
+              {/* Action Buttons Group */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {!event.isGuest && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsMemberModalOpen(true)}
+                    className="gap-1.5 text-xs h-8 px-2.5 sm:px-3"
+                    title="Manage participants"
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Members</span>
+                  </Button>
+                )}
 
-              {/* Metadata Badges */}
-              <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400 pt-1">
-                <div className="flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4 text-zinc-400" />
-                  <span>{event.eventDate ? formatDate(event.eventDate) : 'No date set'}</span>
-                </div>
+                {isOwner && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs h-8 px-2.5 sm:px-3 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-850 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+                    onClick={() => setIsShareModalOpen(true)}
+                    title="Share event and QR code"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Share</span>
+                  </Button>
+                )}
 
-                <button
-                  onClick={() => setIsMemberModalOpen(true)}
-                  className="flex items-center gap-1.5 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
-                >
-                  <Users className="w-4 h-4 text-zinc-400" />
-                  <span className="font-medium underline decoration-dotted">
-                    {event._count?.members || 1} Participants
-                  </span>
-                </button>
+                {isOwner && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs h-8 px-2.5 sm:px-3"
+                    onClick={() => setIsSettingsModalOpen(true)}
+                    title="Event settings"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Settings</span>
+                  </Button>
+                )}
 
-                <div className="flex items-center gap-1.5">
-                  <ImageIcon className="w-4 h-4 text-zinc-400" />
-                  <span>{photos.length} Photos</span>
-                </div>
+                {canUpload && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className="gap-1.5 text-xs h-8 px-3"
+                    onClick={() => setIsUploadModalOpen(true)}
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload</span>
+                  </Button>
+                )}
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex flex-wrap items-center gap-3">
-              {!event.isGuest && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsMemberModalOpen(true)}
-                  className="gap-1.5"
-                >
-                  <Users className="w-4 h-4" />
-                  Members
-                </Button>
-              )}
+            {event.description && (
+              <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 max-w-2xl">
+                {event.description}
+              </p>
+            )}
 
-              {isOwner && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-850 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
-                  onClick={() => setIsShareModalOpen(true)}
-                >
-                  <Share2 className="w-4 h-4" />
-                  Share & QR
-                </Button>
-              )}
+            {/* Event Metadata Strip */}
+            <div className="flex flex-wrap items-center gap-3 sm:gap-5 text-[11px] sm:text-xs text-zinc-500 dark:text-zinc-400 pt-1 border-t border-zinc-100 dark:border-zinc-800/80">
+              <div className="flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+                <span>{event.eventDate ? formatDate(event.eventDate) : 'No date'}</span>
+              </div>
 
-              {isOwner && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => setIsSettingsModalOpen(true)}
-                >
-                  <Settings className="w-4 h-4" />
-                  Settings
-                </Button>
-              )}
+              <button
+                onClick={() => setIsMemberModalOpen(true)}
+                className="flex items-center gap-1.5 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+              >
+                <Users className="w-3.5 h-3.5 text-zinc-400" />
+                <span className="underline decoration-dotted font-medium">
+                  {event._count?.members || 1} Participants
+                </span>
+              </button>
 
-              {canUpload && (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => setIsUploadModalOpen(true)}
-                >
-                  <Upload className="w-4 h-4" />
-                  Upload Photos
-                </Button>
-              )}
+              <div className="flex items-center gap-1.5 font-medium text-zinc-700 dark:text-zinc-300">
+                <ImageIcon className="w-3.5 h-3.5 text-indigo-500" />
+                <span>{photos.length} Photos</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {/* AI Face Discovery & Clustering Bar */}
-      <div className="mt-8">
+      <div className="mt-6 sm:mt-8">
         <FaceDiscoveryBar
           eventId={event.id}
           selectedPersonIds={selectedPersonIds}
@@ -339,45 +400,74 @@ export default function EventDetailPage({
         />
       </div>
 
-      {/* Main Photo Gallery */}
+      {/* Gallery Section */}
       <section className="mt-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-zinc-200 dark:border-zinc-800 gap-2">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-                Gallery ({totalPhotosCount || photos.length})
-              </h2>
-              {selectedPersonIds.length > 0 && (
-                <button
-                  onClick={handleClearPeople}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:text-indigo-300 dark:hover:bg-indigo-900/60 transition-colors cursor-pointer"
-                >
-                  <span>
-                    {selectedPersonIds.includes('none')
-                      ? 'Other Photos'
-                      : selectedPersonIds.length === 1
-                      ? '1 Person Filtered'
-                      : `${selectedPersonIds.length} People (${filterMode === 'all' ? 'Together' : 'Either'})`}
-                  </span>
-                  <span className="opacity-70 text-[10px]">✕ Clear</span>
-                </button>
-              )}
-            </div>
-            <p className="text-xs text-zinc-500">
-              Thumbnail-first fast grid. Click any picture to preview or download high-res original.
-            </p>
+        {/* Gallery Toolbar: Title, Filter Chips, Download All & Select Mode Toggle */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 sm:pb-4 border-b border-zinc-200 dark:border-zinc-800 gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <h2 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+              Gallery
+              <Badge variant="default" className="text-[11px] py-0 px-2 font-semibold">
+                {photos.length}
+              </Badge>
+            </h2>
+
+            {/* Active face filter chip */}
+            {selectedPersonIds.length > 0 && (
+              <button
+                onClick={handleClearPeople}
+                className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-medium text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:text-indigo-300 transition-colors cursor-pointer"
+              >
+                <span>
+                  {selectedPersonIds.includes('none')
+                    ? 'Other Photos'
+                    : selectedPersonIds.length === 1
+                    ? '1 Person'
+                    : `${selectedPersonIds.length} People (${filterMode === 'all' ? 'Together' : 'Either'})`}
+                </span>
+                <X className="w-3 h-3 ml-0.5 opacity-70" />
+              </button>
+            )}
           </div>
 
-          {photos.length > 0 && canUpload && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsUploadModalOpen(true)}
-              className="gap-1.5 self-start sm:self-auto"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              Add More Photos
-            </Button>
+          {/* Gallery Action Controls */}
+          {photos.length > 0 && (
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              {/* Download All / Download Filtered Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleDownloadZip()}
+                isLoading={isDownloadingZip}
+                disabled={isDownloadingZip || photos.length === 0}
+                className="gap-1.5 text-xs h-8"
+                title="Download all photos as a ZIP archive"
+              >
+                <Download className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                <span>
+                  {selectedPersonIds.length > 0
+                    ? `Download Filtered (${photos.length})`
+                    : `Download All (${photos.length})`}
+                </span>
+              </Button>
+
+              {/* Multi-Selection Mode Toggle */}
+              <Button
+                variant={isSelectionMode ? 'primary' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  if (isSelectionMode) {
+                    handleExitSelectionMode();
+                  } else {
+                    setIsSelectionMode(true);
+                  }
+                }}
+                className="gap-1.5 text-xs h-8"
+              >
+                <CheckSquare className="w-3.5 h-3.5" />
+                <span>{isSelectionMode ? 'Done' : 'Select'}</span>
+              </Button>
+            </div>
           )}
         </div>
 
@@ -466,23 +556,111 @@ export default function EventDetailPage({
             )}
           </div>
         ) : (
-          /* Responsive Photo Grid */
-          <div className="mt-8 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+          /* Mobile-Optimized Fast Photo Grid */
+          <div className="mt-4 sm:mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3.5">
             {photos.map((photo) => (
               <PhotoThumbnailCard
                 key={photo.id}
                 photo={photo}
                 isOwner={isOwner}
                 currentUserId={session?.user?.id}
+                isSelectionMode={isSelectionMode}
+                isSelected={selectedPhotoIds.includes(photo.id)}
+                onToggleSelect={handleToggleSelectPhoto}
                 onPhotoClick={(p) => setLightboxPhoto(p)}
                 onPhotoDeleted={(deletedId) => {
                   setPhotos((prev) => prev.filter((p) => p.id !== deletedId));
+                  setSelectedPhotoIds((prev) => prev.filter((id) => id !== deletedId));
                 }}
               />
             ))}
           </div>
         )}
       </section>
+
+      {/* Sticky Bottom Floating Batch Action Bar for Mobile & Desktop */}
+      {isSelectionMode && (
+        <div className="fixed inset-x-0 bottom-0 z-40 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-zinc-200 dark:border-zinc-800 shadow-2xl px-4 py-3 transition-transform animate-in slide-in-from-bottom duration-200">
+          <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-3">
+            {/* Selection Status & Select All */}
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+              <button
+                onClick={handleSelectAll}
+                className="flex items-center gap-2 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer"
+              >
+                {selectedPhotoIds.length === photos.length ? (
+                  <CheckSquare className="w-4 h-4 text-indigo-600" />
+                ) : (
+                  <Square className="w-4 h-4 text-zinc-400" />
+                )}
+                <span>
+                  {selectedPhotoIds.length === photos.length
+                    ? 'Deselect All'
+                    : `Select All (${photos.length})`}
+                </span>
+              </button>
+
+              <Badge variant="purple" className="text-xs py-0.5 px-2.5 font-bold">
+                {selectedPhotoIds.length} Selected
+              </Badge>
+            </div>
+
+            {/* Batch Action Buttons: Download Selected, Delete Selected, Cancel */}
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleDownloadZip(selectedPhotoIds)}
+                disabled={selectedPhotoIds.length === 0 || isDownloadingZip}
+                isLoading={isDownloadingZip}
+                className="flex-1 sm:flex-initial gap-1.5 text-xs h-9 px-3"
+                title="Download selected photos as ZIP"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download ({selectedPhotoIds.length})</span>
+              </Button>
+
+              {(isOwner || !event.isGuest) && (
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => setIsBatchDeleteModalOpen(true)}
+                  disabled={selectedPhotoIds.length === 0}
+                  className="flex-1 sm:flex-initial gap-1.5 text-xs h-9 px-3 bg-red-600 hover:bg-red-700 text-white"
+                  title="Delete selected photos"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete ({selectedPhotoIds.length})</span>
+                </Button>
+              )}
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleExitSelectionMode}
+                className="text-xs h-9 px-2 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+              >
+                Done
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Delete Confirmation Modal */}
+      <BatchDeleteModal
+        isOpen={isBatchDeleteModalOpen}
+        onClose={() => setIsBatchDeleteModalOpen(false)}
+        eventId={event.id}
+        photoIds={selectedPhotoIds}
+        isOwner={isOwner}
+        onDeleted={(deletedIds) => {
+          setPhotos((prev) => prev.filter((p) => !deletedIds.includes(p.id)));
+          setSelectedPhotoIds([]);
+          setIsSelectionMode(false);
+          setTotalPhotosCount((c) => Math.max(0, c - deletedIds.length));
+        }}
+      />
 
       {/* Multi-Photo Upload Dropzone Modal */}
       <UploadDropzoneModal
