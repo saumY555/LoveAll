@@ -32,9 +32,14 @@ if (hasRealGoogleCredentials && googleId && googleSecret) {
   );
 }
 
-// 2. Strictly isolated Development Login Provider
-// Only enabled if NODE_ENV === 'development' AND ENABLE_DEV_AUTH_SHORTCUT === 'true'
-if (isDevAuthEnabled) {
+// 2. Credentials Provider (Instant / Dev Sign-in)
+// Available when in development, when enabled by env, or as a seamless fallback when Google OAuth is not configured yet
+const allowCredentialsAuth =
+  isDevAuthEnabled ||
+  !hasRealGoogleCredentials ||
+  process.env.ALLOW_CREDENTIALS_AUTH === 'true';
+
+if (allowCredentialsAuth) {
   providers.push(
     Credentials({
       id: 'dev-login',

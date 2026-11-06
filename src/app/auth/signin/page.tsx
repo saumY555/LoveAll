@@ -1,13 +1,31 @@
 'use client';
 
-import React, { useState } from 'react';
-import { signIn } from 'next-auth/react';
+import React, { useState, useEffect } from 'react';
+import { signIn, getProviders } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Camera, KeyRound, ArrowRight, Sparkles, Smile, ShieldCheck, Heart } from 'lucide-react';
+import {
+  Camera,
+  KeyRound,
+  ArrowRight,
+  Sparkles,
+  User,
+  Mail,
+  Copy,
+  Check,
+  ExternalLink,
+  AlertCircle,
+  HelpCircle,
+} from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
 
 export default function SignInPage() {
   const router = useRouter();
+
+  // Authentication Provider Availability
+  const [hasGoogleProvider, setHasGoogleProvider] = useState<boolean | null>(null);
+  const [showGoogleSetup, setShowGoogleSetup] = useState(false);
+  const [copiedUri, setCopiedUri] = useState(false);
 
   // Guest Passcode State
   const [passcode, setPasscode] = useState('');
@@ -15,16 +33,30 @@ export default function SignInPage() {
   const [isJoiningPasscode, setIsJoiningPasscode] = useState(false);
   const [passcodeError, setPasscodeError] = useState<string | null>(null);
 
-  // Dev Login State
-  const [devEmail, setDevEmail] = useState('alice@example.com');
-  const [devName, setDevName] = useState('Alice Cooper');
-  const [isDevLoading, setIsDevLoading] = useState(false);
+  // Instant Name & Email Login State
+  const [customName, setCustomName] = useState('');
+  const [customEmail, setCustomEmail] = useState('');
+  const [isInstantLoading, setIsInstantLoading] = useState(false);
 
-  // General Status & Feedback
-  const [googleNotice, setGoogleNotice] = useState<string | null>(null);
+  // Dev Quick Test Login State
+  const [isDevLoading, setIsDevLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isDev = process.env.NODE_ENV === 'development';
+  const [activeOrigin, setActiveOrigin] = useState('http://localhost:3000');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setActiveOrigin(window.location.origin);
+    }
+
+    getProviders()
+      .then((provs) => {
+        setHasGoogleProvider(Boolean(provs?.google));
+      })
+      .catch(() => {
+        setHasGoogleProvider(false);
+      });
+  }, []);
 
   const handleJoinByPasscode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,7 +81,6 @@ export default function SignInPage() {
         throw new Error(data.error || 'Invalid or expired passcode');
       }
 
-      // Successfully joined as guest -> redirect directly to the event gallery
       router.push(`/events/${data.eventId}`);
     } catch (err: unknown) {
       setPasscodeError((err as Error).message);
@@ -59,23 +90,42 @@ export default function SignInPage() {
 
   const handleGoogleSignIn = async () => {
     setError(null);
-    setGoogleNotice(null);
+
+    // If Google OAuth credentials aren't set in .env, don't let NextAuth reload the page blindly!
+    if (!hasGoogleProvider) {
+      setShowGoogleSetup(true);
+      return;
+    }
 
     try {
-      const res = await signIn('google', { callbackUrl: '/events', redirect: false });
-      if (res?.error) {
-        if (res.error === 'Configuration' || res.error.includes('OAuth')) {
-          setGoogleNotice(
-            'Google OAuth credentials are not configured in .env yet. You can join directly with an Event Passcode above or use the test login below.'
-          );
-        } else {
-          setError(res.error);
-        }
-      }
-    } catch {
-      setGoogleNotice(
-        'Google OAuth is not configured with live credentials in .env yet. Please use the Event Passcode above or the test login below.'
-      );
+      // Trigger live Google OAuth redirect
+      await signIn('google', { callbackUrl: '/events' });
+    } catch (err: unknown) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleInstantSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = customEmail.trim();
+    const name = customName.trim();
+
+    if (!email) {
+      setError('Please enter your email address');
+      return;
+    }
+
+    setIsInstantLoading(true);
+    setError(null);
+    try {
+      await signIn('dev-login', {
+        email,
+        name: name || email.split('@')[0],
+        callbackUrl: '/events',
+      });
+    } catch (err: unknown) {
+      setError((err as Error).message);
+      setIsInstantLoading(false);
     }
   };
 
@@ -91,6 +141,16 @@ export default function SignInPage() {
     } catch (err: unknown) {
       setError((err as Error).message);
       setIsDevLoading(false);
+    }
+  };
+
+  const googleRedirectUri = `${activeOrigin}/api/auth/callback/google`;
+
+  const copyRedirectUri = () => {
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(googleRedirectUri);
+      setCopiedUri(true);
+      setTimeout(() => setCopiedUri(false), 2000);
     }
   };
 
@@ -117,15 +177,15 @@ export default function SignInPage() {
           </div>
         )}
 
-        {/* 1. Guest Event Passcode Access (No sign-in required) */}
-        <div className="rounded-3xl border-2 border-purple-200 bg-purple-50/70 p-5 dark:border-purple-900/60 dark:bg-purple-950/30 space-y-3.5 shadow-2xs">
+        {/* 1. Guest Event Passcode Access (Instant access with passcode) */}
+        <div className="rounded-3xl border-2 border-purple-200 bg-purple-50/70 p-5 dark:border-purple-900/60 dark:bg-purple-950/30 space-y-3 shadow-2xs">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-bold text-purple-900 dark:text-purple-200">
               <KeyRound className="w-4 h-4 text-purple-600 dark:text-purple-400" />
               <span>Join Event with Passcode</span>
             </div>
             <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-white dark:bg-purple-900 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-              Guest Access
+              Guest
             </span>
           </div>
 
@@ -174,12 +234,12 @@ export default function SignInPage() {
         <div className="relative flex items-center justify-center">
           <div className="w-full border-t border-stone-200 dark:border-stone-800" />
           <span className="relative bg-white px-3 text-[11px] font-bold text-stone-400 dark:bg-stone-900 uppercase tracking-wider">
-            or sign in
+            or sign in to create events
           </span>
         </div>
 
         {/* 2. Google OAuth Button */}
-        <div className="space-y-3">
+        <div className="space-y-2">
           <button
             type="button"
             onClick={handleGoogleSignIn}
@@ -206,29 +266,74 @@ export default function SignInPage() {
             <span>Continue with Google</span>
           </button>
 
-          {googleNotice && (
-            <div className="rounded-2xl bg-amber-50 border border-amber-200 p-3 text-[11px] text-amber-800 dark:bg-amber-950/40 dark:border-amber-900/40 dark:text-amber-300">
-              <p className="font-semibold">{googleNotice}</p>
-            </div>
+          {hasGoogleProvider === false && (
+            <button
+              type="button"
+              onClick={() => setShowGoogleSetup(true)}
+              className="flex items-center justify-center gap-1.5 text-[11px] font-semibold text-purple-600 hover:text-purple-700 dark:text-purple-400 mx-auto transition-colors"
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span>Google setup instructions & credentials info</span>
+            </button>
           )}
         </div>
 
-        {/* 3. Dev Quick Login (Development Mode) */}
-        {isDev && (
-          <div className="rounded-3xl border-2 border-stone-200/80 bg-stone-50/70 p-4 dark:border-stone-800 dark:bg-stone-850 space-y-3">
-            <div className="flex items-center justify-between text-xs font-bold text-stone-700 dark:text-stone-300">
-              <span>Quick Test Accounts</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold dark:bg-emerald-950 dark:text-emerald-300">
-                Dev Mode
+        {/* 3. Instant Sign-In (Name & Email) */}
+        <div className="rounded-3xl border-2 border-stone-200/80 bg-stone-50/70 p-4.5 dark:border-stone-800 dark:bg-stone-850 space-y-3.5">
+          <div className="flex items-center justify-between text-xs font-bold text-stone-800 dark:text-stone-200">
+            <span className="flex items-center gap-1.5">
+              <span>Instant Sign In</span>
+              <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                1-Click
               </span>
+            </span>
+          </div>
+
+          <form onSubmit={handleInstantSignIn} className="space-y-2.5">
+            <div className="relative">
+              <User className="absolute left-3.5 top-3 w-4 h-4 text-stone-400" />
+              <input
+                type="text"
+                placeholder="Your Name (e.g. Saumya)"
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                className="w-full rounded-2xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 pl-10 pr-3.5 py-2.5 text-xs text-stone-900 dark:text-stone-100 placeholder:text-stone-400 focus:outline-none focus:border-purple-400 shadow-2xs"
+              />
             </div>
 
+            <div className="relative">
+              <Mail className="absolute left-3.5 top-3 w-4 h-4 text-stone-400" />
+              <input
+                type="email"
+                placeholder="Your Email (e.g. saumya@example.com)"
+                value={customEmail}
+                onChange={(e) => setCustomEmail(e.target.value)}
+                className="w-full rounded-2xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 pl-10 pr-3.5 py-2.5 text-xs text-stone-900 dark:text-stone-100 placeholder:text-stone-400 focus:outline-none focus:border-purple-400 shadow-2xs"
+                required
+              />
+            </div>
+
+            <Button
+              type="submit"
+              variant="primary"
+              isLoading={isInstantLoading}
+              className="w-full py-2.5 text-xs font-bold shadow-sm"
+            >
+              Sign In with Email ✨
+            </Button>
+          </form>
+
+          {/* Quick Demo Accounts */}
+          <div className="pt-2 border-t border-stone-200/60 dark:border-stone-700/60">
+            <p className="text-[10px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider mb-2">
+              Or pick a demo account:
+            </p>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => handleDevSignIn('alice@example.com', 'Alice Cooper')}
                 disabled={isDevLoading}
-                className="p-2.5 rounded-2xl border-2 border-purple-200 bg-white hover:bg-purple-50 text-stone-800 text-left transition-all cursor-pointer dark:bg-stone-800 dark:border-purple-900 dark:text-stone-200"
+                className="p-2.5 rounded-2xl border border-purple-200 bg-white hover:bg-purple-50 text-stone-800 text-left transition-all cursor-pointer dark:bg-stone-800 dark:border-purple-900 dark:text-stone-200 hover:scale-[1.02] active:scale-[0.98]"
               >
                 <div className="text-xs font-bold truncate">🌸 Alice Cooper</div>
                 <div className="text-[10px] text-stone-400 truncate">Host & Owner</div>
@@ -238,15 +343,100 @@ export default function SignInPage() {
                 type="button"
                 onClick={() => handleDevSignIn('bob@example.com', 'Bob Builder')}
                 disabled={isDevLoading}
-                className="p-2.5 rounded-2xl border-2 border-sky-200 bg-white hover:bg-sky-50 text-stone-800 text-left transition-all cursor-pointer dark:bg-stone-800 dark:border-sky-900 dark:text-stone-200"
+                className="p-2.5 rounded-2xl border border-sky-200 bg-white hover:bg-sky-50 text-stone-800 text-left transition-all cursor-pointer dark:bg-stone-800 dark:border-sky-900 dark:text-stone-200 hover:scale-[1.02] active:scale-[0.98]"
               >
                 <div className="text-xs font-bold truncate">🛠️ Bob Builder</div>
                 <div className="text-[10px] text-stone-400 truncate">Member</div>
               </button>
             </div>
           </div>
-        )}
+        </div>
       </div>
+
+      {/* Google Setup Guide Modal */}
+      <Modal
+        isOpen={showGoogleSetup}
+        onClose={() => setShowGoogleSetup(false)}
+        title="Google Sign-In Setup Guide 🛠️"
+        description="Google Sign-In needs OAuth credentials from the Google Cloud Console."
+        maxWidth="lg"
+      >
+        <div className="space-y-4 text-xs text-stone-700 dark:text-stone-300">
+          <div className="rounded-2xl bg-amber-50 border border-amber-200 p-3.5 text-amber-800 dark:bg-amber-950/40 dark:border-amber-900/40 dark:text-amber-300 flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+            <div className="space-y-1">
+              <p className="font-bold">Why did this pop up?</p>
+              <p className="leading-relaxed">
+                The current <code className="bg-amber-100 dark:bg-amber-900 px-1 py-0.5 rounded font-mono font-bold">.env</code> contains placeholder keys (<code className="bg-amber-100 dark:bg-amber-900 px-1 py-0.5 rounded font-mono">your-google-client-id</code>). Google OAuth only works after creating a Client ID in your Google Cloud account.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-1">
+            <h4 className="font-bold text-stone-900 dark:text-stone-100 text-sm">
+              Quick 3-Minute Setup:
+            </h4>
+
+            <ol className="list-decimal list-inside space-y-2.5 leading-relaxed">
+              <li className="pl-1">
+                Go to the{' '}
+                <a
+                  href="https://console.cloud.google.com/apis/credentials"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-bold text-purple-600 hover:underline inline-flex items-center gap-0.5"
+                >
+                  <span>Google Cloud Credentials Console</span>
+                  <ExternalLink className="w-3 h-3 inline" />
+                </a>{' '}
+                and create an <strong>OAuth 2.0 Client ID</strong> (Application type: <em>Web application</em>).
+              </li>
+
+              <li className="pl-1 space-y-1.5">
+                <div>Add this exact URL to <strong>Authorized redirect URIs</strong>:</div>
+                <div className="flex items-center gap-2 bg-stone-100 dark:bg-stone-800 p-2.5 rounded-2xl border border-stone-200 dark:border-stone-700 font-mono text-[11px] select-all">
+                  <span className="flex-1 truncate">{googleRedirectUri}</span>
+                  <button
+                    type="button"
+                    onClick={copyRedirectUri}
+                    className="shrink-0 p-1.5 rounded-xl bg-white dark:bg-stone-700 hover:bg-stone-200 text-stone-700 dark:text-stone-200 shadow-2xs transition-colors cursor-pointer"
+                    title="Copy redirect URI"
+                  >
+                    {copiedUri ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </li>
+
+              <li className="pl-1 space-y-1.5">
+                <div>Update your <code className="font-bold">.env</code> file with your Google Client ID and Secret:</div>
+                <div className="bg-stone-900 text-stone-100 p-3 rounded-2xl font-mono text-[11px] space-y-1">
+                  <div>AUTH_GOOGLE_ID=&quot;YOUR_CLIENT_ID.apps.googleusercontent.com&quot;</div>
+                  <div>AUTH_GOOGLE_SECRET=&quot;YOUR_CLIENT_SECRET&quot;</div>
+                </div>
+              </li>
+
+              <li className="pl-1">
+                Restart your dev server (<code className="font-mono bg-stone-100 dark:bg-stone-800 px-1 py-0.5 rounded">npm run dev</code>), and Google Sign-In will connect immediately!
+              </li>
+            </ol>
+          </div>
+
+          <div className="pt-3 border-t border-stone-200 dark:border-stone-800 flex items-center justify-between">
+            <span className="text-[11px] text-stone-500 font-medium">
+              Want to skip Google setup right now?
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowGoogleSetup(false)}
+              className="rounded-full px-4"
+            >
+              Sign In with Email / Demo
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
