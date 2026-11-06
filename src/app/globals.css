@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "../styles/landing.css";
+@import "../styles/signin.css";
 
 :root {
   /* loveall design tokens */

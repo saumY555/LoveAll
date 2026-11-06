@@ -1,0 +1,429 @@
+/* loveall sign-in styles - exact match from loveall-signin.html */
+
+.loveall-signin {
+  color-scheme: light !important;
+  background-color: var(--bg);
+  color: var(--ink);
+  font: 500 1.0625rem/1.55 var(--font-nunito), Nunito, system-ui, sans-serif;
+  margin: 0;
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: clip;
+  -webkit-tap-highlight-color: transparent;
+  display: flex;
+  flex-direction: column;
+}
+
+.loveall-signin h1,
+.loveall-signin h2 {
+  font-family: var(--font-bricolage), 'Bricolage Grotesque', Nunito, sans-serif;
+  font-weight: 800;
+  line-height: 1.1;
+  margin: 0;
+  letter-spacing: -.02em;
+}
+
+.loveall-signin p {
+  margin: 0;
+}
+
+.loveall-signin .wrap {
+  max-width: 1120px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 clamp(16px, 5vw, 24px);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.loveall-signin header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 0;
+}
+
+.loveall-signin .logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 800 1.4rem var(--font-bricolage), 'Bricolage Grotesque', sans-serif;
+  text-decoration: none;
+  color: inherit;
+}
+
+.loveall-signin .logo i,
+.loveall-signin .tile {
+  display: grid;
+  place-items: center;
+  background: var(--tomato);
+  border: 2px solid var(--line);
+  border-radius: 14px 14px 14px 4px;
+}
+
+.loveall-signin .logo i {
+  width: 40px;
+  height: 40px;
+  transform: rotate(-6deg);
+}
+
+.loveall-signin .btn {
+  touch-action: manipulation;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 24px;
+  border: 2px solid var(--line);
+  border-radius: 99px;
+  font: 800 1rem var(--font-nunito), Nunito, sans-serif;
+  text-decoration: none;
+  cursor: pointer;
+  color: var(--on);
+  box-shadow: 4px 4px 0 var(--line);
+  transition: transform .15s, box-shadow .15s;
+}
+
+@media (hover: hover) {
+  .loveall-signin .btn:hover {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 var(--line);
+  }
+}
+
+.loveall-signin .btn:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 var(--line);
+}
+
+.loveall-signin .btn.go { background: var(--tomato); }
+.loveall-signin .btn.alt { background: var(--sun); }
+.loveall-signin .btn.sm { min-height: 40px; padding: 0 18px; background: var(--mint); }
+.loveall-signin .btn.full { width: 100%; }
+
+.loveall-signin main {
+  padding: 8px 0 40px;
+  flex: 1;
+}
+
+.loveall-signin .card {
+  position: relative;
+  max-width: 480px;
+  margin: 18px auto 0;
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: 32px 32px 32px 10px;
+  box-shadow: 6px 6px 0 var(--line);
+  padding: 34px clamp(18px, 5vw, 34px) 26px;
+}
+
+.loveall-signin .card::before {
+  content: "";
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  width: 96px;
+  height: 30px;
+  margin-left: -48px;
+  background: rgba(255, 200, 61, .8);
+  border: 2px solid var(--line);
+  border-radius: 4px;
+  transform: rotate(-3deg);
+}
+
+.loveall-signin .tile {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 14px;
+  transform: rotate(-5deg);
+  box-shadow: 3px 3px 0 var(--line);
+}
+
+.loveall-signin .card h1 {
+  font-size: clamp(1.9rem, 7vw, 2.4rem);
+  text-align: center;
+}
+
+.loveall-signin .sub {
+  text-align: center;
+  color: var(--muted);
+  margin: 8px 0 22px;
+}
+
+.loveall-signin .tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 5px;
+  border: 2px solid var(--line);
+  border-radius: 99px;
+  background: var(--bg);
+  margin-bottom: 20px;
+}
+
+.loveall-signin .tabs button {
+  min-height: 44px;
+  border: 2px solid transparent;
+  border-radius: 99px;
+  background: none;
+  color: var(--ink);
+  font: 800 .98rem var(--font-nunito), Nunito, sans-serif;
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.loveall-signin .tabs button[aria-selected="true"] {
+  background: var(--sun);
+  color: var(--on);
+  border-color: var(--line);
+  box-shadow: 2px 2px 0 var(--line);
+}
+
+.loveall-signin label {
+  display: block;
+  font-weight: 800;
+  font-size: .95rem;
+  margin: 0 0 6px;
+}
+
+.loveall-signin .field {
+  margin-bottom: 16px;
+}
+
+.loveall-signin input {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 18px;
+  border: 2px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  color: var(--on);
+  font: 600 1.0625rem var(--font-nunito), Nunito, sans-serif;
+}
+
+.loveall-signin input::placeholder {
+  color: #9a8478;
+}
+
+.loveall-signin .pw {
+  display: flex;
+  align-items: center;
+  border: 2px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  padding-right: 6px;
+}
+
+.loveall-signin .pw input {
+  border: 0;
+  background: none;
+  min-width: 0;
+}
+
+.loveall-signin .pw input:focus-visible {
+  outline: none;
+}
+
+.loveall-signin .pw:focus-within {
+  outline: 3px solid var(--tomato);
+  outline-offset: 3px;
+}
+
+.loveall-signin .pw button {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--bg);
+  color: var(--ink);
+  font: 800 .88rem var(--font-nunito), Nunito, sans-serif;
+  cursor: pointer;
+}
+
+.loveall-signin .or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 26px 0 18px;
+  color: var(--muted);
+  font-weight: 800;
+  font-size: .92rem;
+}
+
+.loveall-signin .or::before,
+.loveall-signin .or::after {
+  content: "";
+  flex: 1;
+  border-top: 2px dashed var(--line);
+  opacity: .35;
+}
+
+.loveall-signin .pass {
+  background: var(--lilac);
+  color: var(--on);
+  border: 2px solid var(--line);
+  border-radius: 24px;
+  padding: 18px;
+  box-shadow: 4px 4px 0 var(--line);
+}
+
+.loveall-signin .pass .ph {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.loveall-signin .pass h2 {
+  font-size: 1.2rem;
+}
+
+.loveall-signin .pass em {
+  font: 800 .78rem var(--font-nunito), Nunito, sans-serif;
+  font-style: normal;
+  background: #fff;
+  padding: 2px 10px;
+  border: 2px solid var(--line);
+  border-radius: 99px;
+}
+
+.loveall-signin .pass p {
+  font-weight: 700;
+  font-size: .95rem;
+  margin-bottom: 12px;
+}
+
+.loveall-signin .row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.loveall-signin .row input {
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  min-width: 0;
+}
+
+.loveall-signin .row input::placeholder {
+  letter-spacing: .22em;
+}
+
+.loveall-signin .row .btn {
+  flex: 0 0 auto;
+  padding: 0 20px;
+}
+
+.loveall-signin .demo-h {
+  text-align: center;
+  color: var(--muted);
+  font-weight: 800;
+  font-size: .9rem;
+  margin: 24px 0 10px;
+}
+
+.loveall-signin .demo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.loveall-signin .demo button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 12px;
+  border: 2px solid var(--line);
+  border-radius: 18px;
+  color: var(--on);
+  text-align: left;
+  cursor: pointer;
+  font: 700 .8rem var(--font-nunito), Nunito, sans-serif;
+  box-shadow: 3px 3px 0 var(--line);
+  transition: transform .15s, box-shadow .15s;
+}
+
+@media (hover: hover) {
+  .loveall-signin .demo button:hover {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 var(--line);
+  }
+}
+
+.loveall-signin .demo button:active {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--line);
+}
+
+.loveall-signin .demo button:first-child { background: var(--pink); }
+.loveall-signin .demo button:last-child { background: var(--mint); }
+
+.loveall-signin .demo b {
+  display: block;
+  font: 800 1rem var(--font-nunito), Nunito, sans-serif;
+}
+
+.loveall-signin .demo span {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--line);
+  font: 800 1rem var(--font-bricolage), 'Bricolage Grotesque', sans-serif;
+}
+
+.loveall-signin footer {
+  padding: 24px 0 40px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-weight: 700;
+  text-align: center;
+}
+
+.loveall-signin footer ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.loveall-signin footer li {
+  padding: 6px 14px;
+  border: 2px solid var(--line);
+  border-radius: 99px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: .92rem;
+}
+
+@media (min-width: 861px) {
+  .loveall-signin main {
+    padding: 24px 0 56px;
+  }
+  .loveall-signin .card {
+    margin-top: 28px;
+  }
+  .loveall-signin footer {
+    justify-content: space-between;
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loveall-signin * {
+    transition: none !important;
+  }
+}
