@@ -105,6 +105,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       return session;
     },
+    async redirect({ url, baseUrl }) {
+      // Return relative URLs directly so browser navigates to the current host (e.g. Cloudflare tunnel or mobile LAN)
+      if (url.startsWith('/')) return url;
+      try {
+        const parsed = new URL(url);
+        if (
+          parsed.origin === baseUrl ||
+          parsed.hostname.endsWith('.trycloudflare.com') ||
+          parsed.hostname.endsWith('.loca.lt') ||
+          parsed.hostname.endsWith('.ngrok-free.app') ||
+          parsed.hostname.endsWith('.ngrok.io') ||
+          parsed.hostname === 'localhost' ||
+          parsed.hostname === '127.0.0.1' ||
+          parsed.hostname.startsWith('192.168.') ||
+          parsed.hostname.startsWith('10.')
+        ) {
+          return url;
+        }
+      } catch {
+        // Fallback
+      }
+      return baseUrl;
+    },
     async signIn({ user, account }) {
       // If logging in via OAuth, ensure user is created/synced with database
       if (account?.provider === 'google' && user.email) {
