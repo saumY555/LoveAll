@@ -10,7 +10,19 @@ const createShareLinkSchema = z.object({
   canView: z.boolean().default(true),
   canUpload: z.boolean().default(false),
   expiresInDays: z.number().int().positive().nullable().optional(),
+  customPasscode: z.string().trim().min(3).max(30).optional(),
 });
+
+function generateReadablePasscode(): string {
+  // Clear uppercase alphanumeric chars (excluding visually confusing 0/O, 1/I/L)
+  const chars = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+  let code = '';
+  const bytes = crypto.randomBytes(6);
+  for (let i = 0; i < 6; i++) {
+    code += chars[bytes[i] % chars.length];
+  }
+  return code;
+}
 
 /**
  * GET /api/events/[eventId]/share-links
@@ -52,7 +64,7 @@ export async function GET(
 
 /**
  * POST /api/events/[eventId]/share-links
- * Create a new tokenized share link with customizable capabilities (Owner only)
+ * Create a new tokenized share link or custom event passcode (Owner only)
  */
 export async function POST(
   req: NextRequest,
@@ -82,10 +94,54 @@ export async function POST(
       );
     }
 
-    const { canView, canUpload, expiresInDays } = parsed.data;
+    const { canView, canUpload, expiresInDays, customPasscode } = parsed.data;
 
-    // Cryptographically secure 24-character hexadecimal token
-    const token = crypto.randomBytes(16).toString('hex');
+    let token = '';
+
+    if (customPasscode) {
+      // Clean up custom passcode
+      const sanitized = customPasscode.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+      if (sanitized.length < 3) {
+        return NextResponse.json(
+          { error: 'Passcode must be at least 3 alphanumeric characters' },
+          { status: 400 }
+        );
+      }
+
+      // Check for collision
+      const existing = await prisma.shareLink.findFirst({
+        where: {
+          OR: [{ token: sanitized }, { token: sanitized.toLowerCase() }],
+        },
+      });
+
+      if (existing) {
+        return NextResponse.json(
+          { error: `Passcode "${sanitized}" is already taken. Please choose another.` },
+          { status: 409 }
+        );
+      }
+
+      token = sanitized;
+    } else {
+      // Generate unique 6-character readable code
+      let attempts = 0;
+      while (attempts < 5) {
+        const candidate = generateReadablePasscode();
+        const existing = await prisma.shareLink.findUnique({
+          where: { token: candidate },
+        });
+        if (!existing) {
+          token = candidate;
+          break;
+        }
+        attempts++;
+      }
+      if (!token) {
+        // Fallback to 8-character hex
+        token = crypto.randomBytes(4).toString('hex').toUpperCase();
+      }
+    }
 
     let expiresAt: Date | null = null;
     if (expiresInDays) {

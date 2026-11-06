@@ -16,6 +16,7 @@ import {
   Eye,
   Loader2,
   Ban,
+  KeyRound,
 } from 'lucide-react';
 
 interface ShareLinkItem {
@@ -50,11 +51,13 @@ export function ShareModal({
   const [canView, setCanView] = useState(true);
   const [canUpload, setCanUpload] = useState(true);
   const [expiresInDays, setExpiresInDays] = useState<number | null>(7);
+  const [customPasscode, setCustomPasscode] = useState('');
 
   // Generated link details
   const [latestToken, setLatestToken] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedPasscode, setCopiedPasscode] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const getFullShareUrl = (token: string) => {
@@ -135,6 +138,7 @@ export function ShareModal({
           canView,
           canUpload,
           expiresInDays: expiresInDays ? Number(expiresInDays) : null,
+          customPasscode: customPasscode.trim() || undefined,
         }),
       });
 
@@ -143,6 +147,7 @@ export function ShareModal({
 
       setLinks((prev) => [data.shareLink, ...prev]);
       setLatestToken(data.shareLink.token);
+      setCustomPasscode('');
     } catch (err: unknown) {
       setError((err as Error).message);
     } finally {
@@ -151,7 +156,7 @@ export function ShareModal({
   };
 
   const handleRevoke = async (linkId: string) => {
-    if (!confirm('Are you sure you want to revoke this link? Attendees using it will lose guest access immediately.')) {
+    if (!confirm('Are you sure you want to revoke this passcode/link? Attendees using it will lose access immediately.')) {
       return;
     }
 
@@ -178,12 +183,19 @@ export function ShareModal({
     }
   };
 
-  const handleCopy = () => {
+  const handleCopyLink = () => {
     if (!latestToken) return;
     const url = getFullShareUrl(latestToken);
     navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const handleCopyPasscode = () => {
+    if (!latestToken) return;
+    navigator.clipboard.writeText(latestToken);
+    setCopiedPasscode(true);
+    setTimeout(() => setCopiedPasscode(false), 2000);
   };
 
   const handleDownloadQr = () => {
@@ -198,20 +210,47 @@ export function ShareModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Share Event & Invite Guests"
-      description="Create tokenized links and printable QR codes so attendees can view and contribute photos without creating an account."
+      title="Share Event & Guest Passcode"
+      description="Guests can enter the Event Passcode directly at the sign-in page, or scan the QR code to join without creating an account."
       maxWidth="xl"
     >
       <div className="space-y-6">
         {error && (
-          <div className="rounded-lg bg-red-50 p-3 text-xs text-red-600 dark:bg-red-950/40 dark:text-red-400">
+          <div className="rounded-xl bg-red-50 p-3 text-xs text-red-600 dark:bg-red-950/40 dark:text-red-400">
             {error}
           </div>
         )}
 
         {/* Top Active QR & Link Card (if any active link exists) */}
         {latestToken ? (
-          <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/70 via-white to-purple-50/50 p-5 dark:border-indigo-950/60 dark:from-indigo-950/20 dark:via-zinc-900 dark:to-purple-950/20 shadow-xs">
+          <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/70 via-white to-purple-50/50 p-5 dark:border-indigo-950/60 dark:from-indigo-950/20 dark:via-zinc-900 dark:to-purple-950/20 shadow-xs space-y-4">
+            {/* Prominent Event Passcode Display */}
+            <div className="flex items-center justify-between p-3.5 rounded-xl bg-white dark:bg-zinc-800 border border-indigo-200 dark:border-indigo-800/60 shadow-2xs">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400 shrink-0">
+                  <KeyRound className="h-5 w-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 block">
+                    Event Passcode (Join Code)
+                  </span>
+                  <span className="text-xl font-mono font-extrabold tracking-wider text-zinc-900 dark:text-zinc-100">
+                    {latestToken}
+                  </span>
+                </div>
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopyPasscode}
+                className="gap-1.5 text-xs h-9 px-3"
+              >
+                {copiedPasscode ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedPasscode ? 'Copied!' : 'Copy Code'}</span>
+              </Button>
+            </div>
+
             <div className="flex flex-col sm:flex-row items-center gap-6">
               {/* QR Code Canvas/Image */}
               <div className="flex flex-col items-center gap-2">
@@ -220,10 +259,10 @@ export function ShareModal({
                     <img
                       src={qrDataUrl}
                       alt="Event QR Code"
-                      className="h-36 w-36 rounded-lg object-contain"
+                      className="h-32 w-32 rounded-lg object-contain"
                     />
                   ) : (
-                    <div className="h-36 w-36 flex items-center justify-center text-zinc-400">
+                    <div className="h-32 w-32 flex items-center justify-center text-zinc-400">
                       <Loader2 className="w-6 h-6 animate-spin" />
                     </div>
                   )}
@@ -243,11 +282,11 @@ export function ShareModal({
               {/* Link Details and Copy Button */}
               <div className="flex-1 w-full space-y-3 text-left">
                 <div>
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                    Active Guest Link
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                    Direct Guest Link
                   </span>
                   <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
-                    Attendees who scan this QR code or click this link can view the gallery and upload their photos.
+                    Opening this link or scanning the QR code grants instant guest access without requiring sign-in.
                   </p>
                 </div>
 
@@ -261,11 +300,11 @@ export function ShareModal({
                   <Button
                     variant="primary"
                     size="sm"
-                    onClick={handleCopy}
+                    onClick={handleCopyLink}
                     className="gap-1.5 shrink-0 cursor-pointer"
                   >
-                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    <span>{copied ? 'Copied!' : 'Copy Link'}</span>
+                    {copiedLink ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    <span>{copiedLink ? 'Copied!' : 'Copy Link'}</span>
                   </Button>
                 </div>
 
@@ -286,10 +325,10 @@ export function ShareModal({
             <div className="rounded-xl border border-dashed border-zinc-300 p-6 text-center dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/30">
               <QrIcon className="w-8 h-8 mx-auto text-zinc-400 mb-2" />
               <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                No active share links yet
+                No active passcode or share link yet
               </p>
               <p className="text-[11px] text-zinc-500 mt-0.5">
-                Generate a link below to invite attendees with a QR code or shareable URL.
+                Generate a passcode below so guests can view the gallery directly.
               </p>
             </div>
           )
@@ -302,11 +341,44 @@ export function ShareModal({
         >
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider">
-              Create New Share Link
+              Create Passcode & Share Link
             </h4>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Custom Passcode Input */}
+            <div>
+              <label className="text-[10px] font-medium text-zinc-500 mb-1 block">
+                Custom Passcode (Optional)
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. NEP26 (blank for auto-code)"
+                value={customPasscode}
+                onChange={(e) => setCustomPasscode(e.target.value.toUpperCase())}
+                className="h-8 w-full rounded-lg border border-zinc-300 bg-white px-2.5 text-xs font-mono uppercase text-zinc-800 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+              />
+            </div>
+
+            {/* Expiration Dropdown */}
+            <div>
+              <label className="text-[10px] font-medium text-zinc-500 mb-1 block">Link Expiry</label>
+              <select
+                value={expiresInDays === null ? 'never' : String(expiresInDays)}
+                onChange={(e) =>
+                  setExpiresInDays(e.target.value === 'never' ? null : Number(e.target.value))
+                }
+                className="h-8 w-full rounded-lg border border-zinc-300 bg-white px-2 text-xs text-zinc-800 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+              >
+                <option value="1">24 Hours</option>
+                <option value="7">7 Days</option>
+                <option value="30">30 Days</option>
+                <option value="never">Never Expires</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* View Capability */}
             <label className="flex items-center gap-2.5 p-2.5 rounded-lg border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800 cursor-pointer">
               <input
@@ -317,7 +389,7 @@ export function ShareModal({
               />
               <div className="text-xs">
                 <span className="font-medium text-zinc-900 dark:text-zinc-100 block">Allow Viewing</span>
-                <span className="text-[10px] text-zinc-500">Browse photos</span>
+                <span className="text-[10px] text-zinc-500">Guests can browse gallery</span>
               </div>
             </label>
 
@@ -331,26 +403,9 @@ export function ShareModal({
               />
               <div className="text-xs">
                 <span className="font-medium text-zinc-900 dark:text-zinc-100 block">Allow Uploads</span>
-                <span className="text-[10px] text-zinc-500">Guests contribute</span>
+                <span className="text-[10px] text-zinc-500">Guests can add photos</span>
               </div>
             </label>
-
-            {/* Expiration Dropdown */}
-            <div className="p-2.5 rounded-lg border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800 flex flex-col justify-center">
-              <label className="text-[10px] font-medium text-zinc-500 mb-1 block">Link Expiry</label>
-              <select
-                value={expiresInDays === null ? 'never' : String(expiresInDays)}
-                onChange={(e) =>
-                  setExpiresInDays(e.target.value === 'never' ? null : Number(e.target.value))
-                }
-                className="h-7 w-full rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
-              >
-                <option value="1">24 Hours</option>
-                <option value="7">7 Days</option>
-                <option value="30">30 Days</option>
-                <option value="never">Never Expires</option>
-              </select>
-            </div>
           </div>
 
           <div className="flex justify-end pt-1">
@@ -362,7 +417,7 @@ export function ShareModal({
               className="gap-1.5 cursor-pointer"
             >
               <Share2 className="w-3.5 h-3.5" />
-              Generate Link & QR Code
+              <span>Create Passcode & Link</span>
             </Button>
           </div>
         </form>
@@ -370,7 +425,7 @@ export function ShareModal({
         {/* Existing Links List & Revocation */}
         <div className="space-y-3">
           <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-            All Share Links ({links.length})
+            All Event Passcodes ({links.length})
           </h4>
 
           {isLoading ? (
@@ -378,7 +433,7 @@ export function ShareModal({
               <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
             </div>
           ) : links.length === 0 ? (
-            <p className="text-xs text-zinc-400 py-2">No links created yet.</p>
+            <p className="text-xs text-zinc-400 py-2">No passcodes created yet.</p>
           ) : (
             <div className="divide-y divide-zinc-100 dark:divide-zinc-800 max-h-48 overflow-y-auto">
               {links.map((link) => {
@@ -395,8 +450,8 @@ export function ShareModal({
                         onClick={() => {
                           if (isActive) setLatestToken(link.token);
                         }}
-                        className="text-xs font-mono text-zinc-800 dark:text-zinc-200 hover:text-indigo-600 truncate max-w-[140px] sm:max-w-xs cursor-pointer text-left"
-                        title="Click to view QR code"
+                        className="text-xs font-mono font-bold text-zinc-800 dark:text-zinc-200 hover:text-indigo-600 truncate max-w-[140px] sm:max-w-xs cursor-pointer text-left"
+                        title="Click to activate and view QR code"
                       >
                         {link.token}
                       </button>
@@ -420,7 +475,8 @@ export function ShareModal({
                             size="sm"
                             onClick={() => {
                               navigator.clipboard.writeText(getFullShareUrl(link.token));
-                              alert('Link copied to clipboard!');
+                              setCopiedLink(true);
+                              setTimeout(() => setCopiedLink(false), 2000);
                             }}
                             className="h-7 px-2 text-xs"
                             title="Copy link"
@@ -434,7 +490,7 @@ export function ShareModal({
                             isLoading={revokingId === link.id}
                             onClick={() => handleRevoke(link.id)}
                             className="h-7 px-2 text-xs gap-1"
-                            title="Revoke link immediately"
+                            title="Revoke passcode immediately"
                           >
                             <Ban className="w-3 h-3" />
                             Revoke

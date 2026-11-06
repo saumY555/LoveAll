@@ -128,13 +128,17 @@ export function FaceDiscoveryBar({
       if (data.isScanning) {
         setIsScanning(true);
         setScanMessage(`Processing ${data.done} of ${data.total} photos...`);
-      } else if (isScanning) {
-        // Was scanning, now complete
-        setIsScanning(false);
-        setScanMessage('Face processing complete!');
-        await fetchPeople();
-        onRefreshPhotos();
-        setTimeout(() => setScanMessage(null), 5000);
+      } else {
+        if (isScanning || (scanMessage && scanMessage.startsWith('Processing'))) {
+          // Was scanning, now complete
+          setIsScanning(false);
+          setScanMessage('Face processing complete!');
+          await fetchPeople();
+          onRefreshPhotos();
+          setTimeout(() => setScanMessage(null), 4000);
+        } else {
+          setIsScanning(false);
+        }
       }
     } catch (err) {
       console.warn('Failed to poll face scan status:', err);

@@ -18,8 +18,14 @@ export async function GET(
   try {
     const { token } = await params;
 
-    const shareLink = await prisma.shareLink.findUnique({
-      where: { token },
+    const shareLink = await prisma.shareLink.findFirst({
+      where: {
+        OR: [
+          { token },
+          { token: token.toUpperCase() },
+          { token: token.toLowerCase() },
+        ],
+      },
       include: {
         event: {
           select: {
@@ -99,8 +105,14 @@ export async function POST(
     const parsed = joinSchema.safeParse(body);
     const displayName = parsed.success && parsed.data.displayName ? parsed.data.displayName : 'Guest Attendee';
 
-    const shareLink = await prisma.shareLink.findUnique({
-      where: { token },
+    const shareLink = await prisma.shareLink.findFirst({
+      where: {
+        OR: [
+          { token },
+          { token: token.toUpperCase() },
+          { token: token.toLowerCase() },
+        ],
+      },
       include: { event: true },
     });
 

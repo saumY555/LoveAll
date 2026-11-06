@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useCallback, memo } from 'react';
+import React, { useState, useRef, useCallback, memo, useTransition } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import {
@@ -10,6 +10,7 @@ import {
   AlertCircle,
   FileImage,
   RefreshCw,
+  Trash2,
 } from 'lucide-react';
 import { formatBytes } from '@/lib/utils';
 
@@ -35,7 +36,7 @@ interface UploadItemRowProps {
   onRemove: (id: string) => void;
 }
 
-// Memoized item row prevents re-rendering all 100+ file rows on every progress tick
+// Memoized item row with CSS content-visibility for silky smooth 60fps rendering even with 100+ files
 const UploadItemRow = memo(function UploadItemRow({
   item,
   isUploading,
@@ -43,7 +44,10 @@ const UploadItemRow = memo(function UploadItemRow({
   onRemove,
 }: UploadItemRowProps) {
   return (
-    <div className="flex items-center justify-between p-3 gap-3">
+    <div
+      className="flex items-center justify-between p-3 gap-3 transition-colors hover:bg-zinc-50/50 dark:hover:bg-zinc-800/40"
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 48px' }}
+    >
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
           <FileImage className="h-4 w-4" />
@@ -102,7 +106,8 @@ const UploadItemRow = memo(function UploadItemRow({
           <button
             onClick={() => onRemove(item.id)}
             disabled={isUploading}
-            className="text-zinc-400 hover:text-zinc-600 p-1 cursor-pointer"
+            aria-label={`Remove ${item.file.name}`}
+            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -122,6 +127,10 @@ export function UploadDropzoneModal({
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragCounter = useRef(0);
 
   const addFiles = useCallback((files: FileList | File[]) => {
     const validFiles: FileUploadItem[] = [];
@@ -156,29 +165,52 @@ export function UploadDropzoneModal({
     }
 
     if (validFiles.length > 0) {
-      setItems((prev) => [...prev, ...validFiles]);
+      startTransition(() => {
+        setItems((prev) => [...prev, ...validFiles]);
+      });
     }
   }, []);
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(true);
+    dragCounter.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
   };
 
-  const handleDragLeave = () => {
-    setIsDragging(false);
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current--;
+    if (dragCounter.current <= 0) {
+      dragCounter.current = 0;
+      setIsDragging(false);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    dragCounter.current = 0;
     setIsDragging(false);
-    if (e.dataTransfer.files) {
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       addFiles(e.dataTransfer.files);
     }
   };
 
   const removeItem = useCallback((id: string) => {
-    setItems((prev) => prev.filter((item) => item.id !== id));
+    startTransition(() => {
+      setItems((prev) => prev.filter((item) => item.id !== id));
+    });
+  }, []);
+
+  const clearAllQueued = useCallback(() => {
+    startTransition(() => {
+      setItems((prev) => prev.filter((item) => item.status !== 'queued' && item.status !== 'error'));
+    });
   }, []);
 
   // Upload an individual item with throttled XHR progress updates
@@ -317,6 +349,7 @@ export function UploadDropzoneModal({
 
   const completedCount = items.filter((i) => i.status === 'done').length;
   const errorCount = items.filter((i) => i.status === 'error').length;
+  const queuedCount = items.filter((i) => i.status === 'queued' || i.status === 'error').length;
   const totalCount = items.length;
 
   return (
@@ -346,54 +379,83 @@ export function UploadDropzoneModal({
           </div>
         )}
 
-        {/* Drag and Drop Zone using semantic label for native OS file selection */}
-        <label
-          htmlFor="gallery-file-upload-input"
+        {/* Hidden native file input triggered programmatically to avoid click hijacking */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept="image/*"
+          onChange={(e) => {
+            if (e.target.files) addFiles(e.target.files);
+            e.target.value = '';
+          }}
+          className="hidden"
+          tabIndex={-1}
+        />
+
+        {/* Drag and Drop Zone button */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => fileInputRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              fileInputRef.current?.click();
+            }
+          }}
+          onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className={`relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 text-center cursor-pointer transition-colors block ${
+          className={`relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 text-center cursor-pointer transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
             isDragging
-              ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/20'
+              ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/30 scale-[1.01]'
               : 'border-zinc-300 hover:border-zinc-400 bg-zinc-50/50 dark:border-zinc-700 dark:bg-zinc-900/50'
           }`}
         >
-          <input
-            id="gallery-file-upload-input"
-            type="file"
-            multiple
-            accept="image/*"
-            onChange={(e) => {
-              if (e.target.files) addFiles(e.target.files);
-              e.target.value = '';
-            }}
-            className="sr-only"
-          />
-
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400 mb-3 mx-auto">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400 mb-3 mx-auto pointer-events-none select-none">
             <Upload className="h-6 w-6" />
           </div>
 
-          <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 pointer-events-none select-none">
             Click to select photos or drag & drop here
           </p>
-          <p className="mt-1 text-xs text-zinc-500">
+          <p className="mt-1 text-xs text-zinc-500 pointer-events-none select-none">
             JPEG, PNG, WebP, HEIC up to 50MB per file. Multi-file upload supported.
           </p>
-        </label>
+        </div>
 
-        {/* Selected Files List with memoized rows and smooth scroll container */}
+        {/* Selected Files Header & List */}
         {items.length > 0 && (
-          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800 max-h-64 overflow-y-auto overscroll-contain">
-            {items.map((item) => (
-              <UploadItemRow
-                key={item.id}
-                item={item}
-                isUploading={isUploading}
-                onRetry={uploadSingleItem}
-                onRemove={removeItem}
-              />
-            ))}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs text-zinc-500 px-1">
+              <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                {queuedCount > 0 ? `${queuedCount} photo(s) selected` : `${items.length} photo(s) processed`}
+              </span>
+              {!isUploading && queuedCount > 0 && (
+                <button
+                  onClick={clearAllQueued}
+                  className="inline-flex items-center gap-1 text-zinc-500 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer text-xs font-medium"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear All ({queuedCount})</span>
+                </button>
+              )}
+            </div>
+
+            {/* Scrollable list with content-visibility for instant 60fps rendering */}
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800 max-h-64 overflow-y-auto overscroll-contain">
+              {items.map((item) => (
+                <UploadItemRow
+                  key={item.id}
+                  item={item}
+                  isUploading={isUploading}
+                  onRetry={uploadSingleItem}
+                  onRemove={removeItem}
+                />
+              ))}
+            </div>
           </div>
         )}
 
@@ -420,7 +482,7 @@ export function UploadDropzoneModal({
               {completedCount > 0 && completedCount === totalCount ? 'Close' : 'Cancel'}
             </Button>
 
-            {items.some((i) => i.status === 'queued' || i.status === 'error') && (
+            {queuedCount > 0 && (
               <Button
                 variant="primary"
                 size="sm"
@@ -428,7 +490,7 @@ export function UploadDropzoneModal({
                 isLoading={isUploading}
                 disabled={items.length === 0}
               >
-                Upload {items.filter((i) => i.status === 'queued' || i.status === 'error').length} Photos
+                Upload {queuedCount} Photo{queuedCount === 1 ? '' : 's'}
               </Button>
             )}
           </div>

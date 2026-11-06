@@ -10,7 +10,46 @@ import {
 
 const BATCH_SIZE = 10;
 const SLEEP_IDLE_MS = 2000;
-const RECOVERY_INTERVAL_MS = 60_000;
+const RECOVERY_INTERVAL_MS = 30_000; // Recover stale photos every 30 seconds
+const STALE_PHOTO_TIMEOUT_MS = 60_000; // Reset photos stuck in PROCESSING for > 60 seconds
+
+async function withDbRetry<T>(
+  operation: () => Promise<T>,
+  name: string,
+  maxAttempts = 5
+): Promise<T> {
+  let attempt = 0;
+  while (attempt < maxAttempts) {
+    try {
+      return await operation();
+    } catch (err: any) {
+      attempt++;
+      const isTransient =
+        err?.code === 'P1001' ||
+        err?.code === 'P1002' ||
+        err?.code === 'P1008' ||
+        err?.code === 'P1017' ||
+        err?.message?.includes("Can't reach database server") ||
+        err?.message?.includes('connection closed') ||
+        err?.message?.includes('Connection terminated') ||
+        err?.message?.includes('Connection reset') ||
+        err?.message?.includes('connection pool') ||
+        err?.message?.includes('Timed out fetching') ||
+        err?.message?.includes('closed unexpectedly');
+
+      if (isTransient && attempt < maxAttempts) {
+        const delay = Math.min(800 * attempt, 4000);
+        console.warn(
+          `[FaceWorker DB Retry] ${name} hit transient Neon issue (${err?.code || 'timeout'}). Retrying ${attempt}/${maxAttempts} in ${delay}ms...`
+        );
+        await new Promise((r) => setTimeout(r, delay));
+      } else {
+        throw err;
+      }
+    }
+  }
+  throw new Error(`[FaceWorker] Operation ${name} failed after ${maxAttempts} attempts`);
+}
 
 interface DetectedFace {
   boundingBox: {
@@ -157,15 +196,15 @@ interface ClaimedPhotoRow {
 }
 
 /**
- * Reset photos stuck in PROCESSING for more than 5 minutes back to PENDING.
+ * Reset photos stuck in PROCESSING for more than 60 seconds back to PENDING.
  */
 async function recoverStaleProcessingPhotos() {
-  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+  const cutoff = new Date(Date.now() - STALE_PHOTO_TIMEOUT_MS);
   const result = await prisma.photo.updateMany({
     where: {
       faceStatus: 'PROCESSING',
       isDeleted: false,
-      faceProcessedAt: { lt: fiveMinutesAgo },
+      faceProcessedAt: { lt: cutoff },
     },
     data: {
       faceStatus: 'PENDING',
@@ -174,7 +213,7 @@ async function recoverStaleProcessingPhotos() {
 
   if (result.count > 0) {
     console.log(
-      `[FaceWorker] [CRASH RECOVERY] Reset ${result.count} stale photos (> 5 min) back to PENDING.`
+      `[FaceWorker] [CRASH RECOVERY] Reset ${result.count} stale photos (> 60s) back to PENDING.`
     );
   }
 }
@@ -183,30 +222,32 @@ async function recoverStaleProcessingPhotos() {
  * Claim up to N photos with a single transaction using SKIP LOCKED.
  */
 async function claimPendingPhotos(limit: number): Promise<ClaimedPhotoRow[]> {
-  const claimed = await prisma.$queryRaw<ClaimedPhotoRow[]>`
-    WITH candidate AS (
-      SELECT id
-      FROM "Photo"
-      WHERE "faceStatus" = 'PENDING'::"FaceStatus"
-        AND "isDeleted" = false
-      ORDER BY "createdAt" ASC
-      LIMIT ${limit}
-      FOR UPDATE SKIP LOCKED
-    ),
-    updated AS (
-      UPDATE "Photo" p
-      SET "faceStatus" = 'PROCESSING'::"FaceStatus",
-          "faceProcessedAt" = NOW()
-      FROM candidate c
-      WHERE p.id = c.id
-      RETURNING p.id, p."eventId", p."assetId"
-    )
-    SELECT u.id, u."eventId", u."assetId", pa."storageKeyOriginal"
-    FROM updated u
-    JOIN "PhotoAsset" pa ON pa.id = u."assetId"
-  `;
+  return withDbRetry(async () => {
+    const claimed = await prisma.$queryRaw<ClaimedPhotoRow[]>`
+      WITH candidate AS (
+        SELECT id
+        FROM "Photo"
+        WHERE "faceStatus" = 'PENDING'::"FaceStatus"
+          AND "isDeleted" = false
+        ORDER BY "createdAt" ASC
+        LIMIT ${limit}
+        FOR UPDATE SKIP LOCKED
+      ),
+      updated AS (
+        UPDATE "Photo" p
+        SET "faceStatus" = 'PROCESSING'::"FaceStatus",
+            "faceProcessedAt" = NOW()
+        FROM candidate c
+        WHERE p.id = c.id
+        RETURNING p.id, p."eventId", p."assetId"
+      )
+      SELECT u.id, u."eventId", u."assetId", pa."storageKeyOriginal"
+      FROM updated u
+      JOIN "PhotoAsset" pa ON pa.id = u."assetId"
+    `;
 
-  return claimed;
+    return claimed;
+  }, 'claimPendingPhotos');
 }
 
 /**
@@ -288,15 +329,19 @@ async function runEventClusteringIfComplete(
 
   const allFacesMap = new Map(allFaces.map((f) => [f.id, f]));
 
-  // Atomically persist cluster assignments using the proven batch function
-  await persistScanAndClusterTransaction({
-    eventId,
-    successfulPhotoIds: [],
-    allDetectedFaces: [],
-    clusterResult,
-    existingPeople,
-    allFacesMap,
-  });
+  // Atomically persist cluster assignments using the proven batch function with retry
+  await withDbRetry(
+    () =>
+      persistScanAndClusterTransaction({
+        eventId,
+        successfulPhotoIds: [],
+        allDetectedFaces: [],
+        clusterResult,
+        existingPeople,
+        allFacesMap,
+      }),
+    `persistClusters(${eventId})`
+  );
 
   const finalPeopleCount = await prisma.person.count({
     where: { eventId },
@@ -371,38 +416,42 @@ async function main() {
 
           const detectedFaces = res.faces || [];
 
-          // Persist faces and mark photo DONE
-          await prisma.$transaction(
-            async (tx) => {
-              // Delete old faces for this photo (e.g. on rescan)
-              await tx.face.deleteMany({
-                where: { photoId: photo.id },
-              });
+          // Persist faces and mark photo DONE with automatic retry
+          await withDbRetry(
+            () =>
+              prisma.$transaction(
+                async (tx) => {
+                  // Delete old faces for this photo (e.g. on rescan)
+                  await tx.face.deleteMany({
+                    where: { photoId: photo.id },
+                  });
 
-              if (detectedFaces.length > 0) {
-                await tx.face.createMany({
-                  data: detectedFaces.map((f) => ({
-                    id: crypto.randomUUID(),
-                    photoId: photo.id,
-                    boundingBox: f.boundingBox,
-                    embedding: f.embedding,
-                    confidence: f.confidence,
-                    thumbnailUrl: `/api/faces/${f.thumbnailFilename}`,
-                    isNoise: false,
-                  })),
-                });
-              }
+                  if (detectedFaces.length > 0) {
+                    await tx.face.createMany({
+                      data: detectedFaces.map((f) => ({
+                        id: crypto.randomUUID(),
+                        photoId: photo.id,
+                        boundingBox: f.boundingBox,
+                        embedding: f.embedding,
+                        confidence: f.confidence,
+                        thumbnailUrl: `/api/faces/${f.thumbnailFilename}`,
+                        isNoise: false,
+                      })),
+                    });
+                  }
 
-              await tx.photo.update({
-                where: { id: photo.id },
-                data: {
-                  faceStatus: 'DONE',
-                  faceProcessedAt: new Date(),
-                  faceError: null,
+                  await tx.photo.update({
+                    where: { id: photo.id },
+                    data: {
+                      faceStatus: 'DONE',
+                      faceProcessedAt: new Date(),
+                      faceError: null,
+                    },
+                  });
                 },
-              });
-            },
-            { maxWait: 15000, timeout: 15000 }
+                { maxWait: 15000, timeout: 15000 }
+              ),
+            `saveFaces(${photo.id})`
           );
 
           console.log(
