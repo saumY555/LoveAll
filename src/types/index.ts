@@ -11,6 +11,7 @@ export interface SessionUser {
 
 export interface EventWithRole extends Event {
   userRole?: EventRoleType | null;
+  coverPhotoUrl?: string | null;
   isGuest?: boolean;
   canGuestUpload?: boolean;
   guestIdentity?: {
@@ -30,6 +31,7 @@ export interface CreateEventDTO {
   name: string;
   description?: string;
   coverImage?: string;
+  coverPhotoId?: string | null;
   eventDate?: string;
   isPrivate?: boolean;
   allowGuestView?: boolean;
@@ -40,6 +42,7 @@ export interface UpdateEventDTO {
   name?: string;
   description?: string;
   coverImage?: string;
+  coverPhotoId?: string | null;
   eventDate?: string;
   isPrivate?: boolean;
   allowGuestView?: boolean;

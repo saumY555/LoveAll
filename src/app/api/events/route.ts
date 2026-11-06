@@ -43,6 +43,15 @@ export async function GET() {
                 photos: { where: { isDeleted: false } },
               },
             },
+            coverPhoto: {
+              select: { id: true, isDeleted: true },
+            },
+            photos: {
+              where: { isDeleted: false },
+              select: { id: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
           },
         },
       },
@@ -51,10 +60,27 @@ export async function GET() {
       },
     });
 
-    const events = memberships.map((m) => ({
-      ...m.event,
-      userRole: m.role,
-    }));
+    const events = memberships.map((m) => {
+      const activeCoverPhoto =
+        m.event.coverPhoto && !m.event.coverPhoto.isDeleted
+          ? m.event.coverPhoto
+          : null;
+      const fallbackPhoto = m.event.photos[0] || null;
+      const effectivePhoto = activeCoverPhoto || fallbackPhoto;
+
+      const coverPhotoUrl = effectivePhoto
+        ? `/api/events/${m.event.id}/photos/${effectivePhoto.id}/preview`
+        : m.event.coverImage || null;
+
+      const { photos, coverPhoto, ...cleanEvent } = m.event;
+
+      return {
+        ...cleanEvent,
+        coverPhotoId: activeCoverPhoto?.id || fallbackPhoto?.id || null,
+        coverPhotoUrl,
+        userRole: m.role,
+      };
+    });
 
     return NextResponse.json({ events });
   } catch (error: unknown) {

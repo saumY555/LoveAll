@@ -9,6 +9,7 @@ const updateEventSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(1000).optional(),
   coverImage: z.string().url().optional().or(z.literal('')),
+  coverPhotoId: z.string().nullable().optional(),
   eventDate: z.string().optional().or(z.literal('')),
   isPrivate: z.boolean().optional(),
   allowGuestView: z.boolean().optional(),
@@ -93,16 +94,30 @@ export async function PATCH(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const roleCheck = await requireEventRole(eventId, session.user.id, [EventRole.OWNER]);
-  if (!roleCheck.allowed) {
-    return NextResponse.json(
-      { error: roleCheck.error || 'Only the event owner can modify settings' },
-      { status: roleCheck.statusCode || 403 }
-    );
-  }
-
   try {
     const body = await req.json();
+    const isCoverOnly =
+      body.coverPhotoId !== undefined &&
+      body.name === undefined &&
+      body.description === undefined &&
+      body.eventDate === undefined &&
+      body.isPrivate === undefined &&
+      body.allowGuestView === undefined &&
+      body.allowGuestUpload === undefined;
+
+    // Allow both Host (OWNER) and Member to change cover photo; other settings require OWNER
+    const allowedRoles = isCoverOnly
+      ? [EventRole.OWNER, EventRole.MEMBER]
+      : [EventRole.OWNER];
+
+    const roleCheck = await requireEventRole(eventId, session.user.id, allowedRoles);
+    if (!roleCheck.allowed) {
+      return NextResponse.json(
+        { error: roleCheck.error || 'You do not have permission to modify this event' },
+        { status: roleCheck.statusCode || 403 }
+      );
+    }
+
     const parsed = updateEventSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -116,11 +131,24 @@ export async function PATCH(
       name,
       description,
       coverImage,
+      coverPhotoId,
       eventDate,
       isPrivate,
       allowGuestView,
       allowGuestUpload,
     } = parsed.data;
+
+    if (coverPhotoId) {
+      const photoExists = await prisma.photo.findFirst({
+        where: { id: coverPhotoId, eventId, isDeleted: false },
+      });
+      if (!photoExists) {
+        return NextResponse.json(
+          { error: 'Selected photo does not exist in this event' },
+          { status: 400 }
+        );
+      }
+    }
 
     const updatedEvent = await prisma.event.update({
       where: { id: eventId },
@@ -128,6 +156,7 @@ export async function PATCH(
         ...(name !== undefined && { name }),
         ...(description !== undefined && { description: description || null }),
         ...(coverImage !== undefined && { coverImage: coverImage || null }),
+        ...(coverPhotoId !== undefined && { coverPhotoId: coverPhotoId || null }),
         ...(eventDate !== undefined && {
           eventDate: eventDate ? new Date(eventDate) : null,
         }),

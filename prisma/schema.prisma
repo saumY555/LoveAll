@@ -77,6 +77,8 @@ model Event {
   name             String
   description      String?         @db.Text
   coverImage       String?
+  coverPhotoId     String?
+  coverPhoto       Photo?          @relation("EventCoverPhoto", fields: [coverPhotoId], references: [id], onDelete: SetNull)
   eventDate        DateTime?
   isPrivate        Boolean         @default(true)
   allowGuestView   Boolean         @default(false)
@@ -190,6 +192,7 @@ model Photo {
   asset            PhotoAsset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
   uploadReferences PhotoUploadReference[]
   faces            Face[]
+  coverForEvents   Event[]                @relation("EventCoverPhoto")
 
   @@unique([eventId, assetId])
   @@index([eventId, isDeleted])
