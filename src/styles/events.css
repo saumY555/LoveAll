@@ -230,11 +230,21 @@
   display: block;
 }
 
-.loveall-events .pile {
+.loveall-events .pics-container {
   position: relative;
   display: block;
+}
+
+.loveall-events .pile-image-link {
+  display: block;
   text-decoration: none;
-  color: var(--ink);
+  color: inherit;
+}
+
+.loveall-events .pile-info {
+  display: block;
+  text-decoration: none;
+  color: inherit;
 }
 
 .loveall-events .pics {
@@ -251,31 +261,49 @@
   border-radius: 6px;
   padding: 7px 7px 0;
   box-shadow: 4px 4px 0 var(--line);
-  transition: transform .2s;
+  transition: transform .2s ease-out;
+}
+
+/* Stacking order: back-1 (bottom), back-2 (middle), front (top) */
+.loveall-events .p.p-back-1 {
+  transform: rotate(-7deg) translate(-6px, 2px);
+  z-index: 1;
+}
+
+.loveall-events .p.p-back-2 {
+  transform: rotate(5deg) translate(6px, -2px);
+  z-index: 2;
+}
+
+.loveall-events .p.p-front {
+  transform: rotate(var(--r, -2deg));
+  z-index: 3;
 }
 
 .loveall-events .p b {
-  display: grid;
-  place-items: center;
+  display: block;
+  position: relative;
   height: 78%;
   border: 2px solid var(--line);
   border-radius: 3px;
   background: var(--bg);
   color: var(--muted);
   overflow: hidden;
-  position: relative;
 }
 
-.loveall-events .p img {
+.loveall-events .p b svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.loveall-events .p b img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   filter: contrast(1.02) saturate(0.96) sepia(0.06);
 }
-
-.loveall-events .p:nth-child(1) { transform: rotate(-7deg) translate(-6px, 2px); }
-.loveall-events .p:nth-child(2) { transform: rotate(5deg) translate(6px, -2px); }
-.loveall-events .p:nth-child(3) { transform: rotate(var(--r, -2deg)); z-index: 1; }
 
 .loveall-events .p em {
   display: block;
@@ -290,9 +318,15 @@
 }
 
 @media (hover: hover) {
-  .loveall-events .pile-wrap:hover .p:nth-child(3) { transform: rotate(0) translateY(-4px); }
-  .loveall-events .pile-wrap:hover .p:nth-child(1) { transform: rotate(-11deg) translate(-10px, 2px); }
-  .loveall-events .pile-wrap:hover .p:nth-child(2) { transform: rotate(9deg) translate(10px, -2px); }
+  .loveall-events .pile-wrap:hover .p.p-front {
+    transform: rotate(0deg) translateY(-4px);
+  }
+  .loveall-events .pile-wrap:hover .p.p-back-1 {
+    transform: rotate(-11deg) translate(-10px, 2px);
+  }
+  .loveall-events .pile-wrap:hover .p.p-back-2 {
+    transform: rotate(9deg) translate(10px, -2px);
+  }
   
   .loveall-events .cover-btn {
     opacity: 0;
@@ -308,7 +342,7 @@
 
 .loveall-events .dot {
   position: absolute;
-  z-index: 3;
+  z-index: 10;
   top: -14px;
   right: -8px;
   display: grid;
@@ -339,19 +373,19 @@
 .loveall-events .li:nth-child(5n+4) { --c: var(--sun); --r: 3deg; }
 .loveall-events .li:nth-child(5n)   { --c: var(--tomato); --r: -2deg; }
 
-.loveall-events .pile h3 {
+.loveall-events .pile-info h3 {
   font-size: 1.45rem;
   overflow-wrap: anywhere;
 }
 
-.loveall-events .pile .m {
+.loveall-events .pile-info .m {
   margin-top: 4px;
   color: var(--muted);
   font-weight: 700;
   font-size: .92rem;
 }
 
-.loveall-events .pile .tag {
+.loveall-events .pile-info .tag {
   display: inline-block;
   margin-top: 8px;
   padding: 1px 10px;
@@ -362,12 +396,12 @@
   color: var(--ink);
 }
 
-/* Change cover mint camera button on top polaroid */
+/* Change cover mint camera button positioned on top polaroid bottom-right */
 .loveall-events .cover-btn {
   position: absolute;
-  right: 14px;
-  bottom: 22px;
-  z-index: 5;
+  right: 0px;
+  bottom: 8px;
+  z-index: 20;
   display: grid;
   place-items: center;
   width: 44px;
@@ -572,7 +606,7 @@
     width: auto;
     margin-left: auto;
   }
-  .loveall-events .pile h3 {
+  .loveall-events .pile-info h3 {
     font-size: 1.6rem;
   }
 }
