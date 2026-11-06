@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Completely disable Next.js development indicator ("N" badge)
+  devIndicators: false,
+
   // Allow Cloudflare tunnels, localtunnel, ngrok, and local LAN devices
   allowedDevOrigins: [
     "*.trycloudflare.com",
