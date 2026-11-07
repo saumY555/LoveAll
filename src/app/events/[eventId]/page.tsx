@@ -63,19 +63,46 @@ export default function EventDetailPage({
 
   // Compute People Meta Map for instant lookup in photo tiles
   const peopleMap = useMemo(() => {
+    // 1. Count occurrences of each custom name's first letter
+    const letterCounts = new Map<string, number>();
+    people.forEach((p) => {
+      const hasCustomName = Boolean(p.name && p.name !== 'Unnamed Person' && !p.name.startsWith('Person '));
+      if (hasCustomName) {
+        const firstChar = p.name!.trim()[0].toUpperCase();
+        letterCounts.set(firstChar, (letterCounts.get(firstChar) || 0) + 1);
+      }
+    });
+
+    // 2. Build the map with dotLabel
     const map = new Map<
       string,
-      { id: string; index: number; displayName: string; color: string; thumbnailUrl: string | null }
+      { id: string; index: number; displayName: string; color: string; dotLabel: string; thumbnailUrl: string | null }
     >();
+
     people.forEach((p, idx) => {
+      const index = idx + 1;
+      const hasCustomName = Boolean(p.name && p.name !== 'Unnamed Person' && !p.name.startsWith('Person '));
+      const displayName = hasCustomName ? p.name!.trim() : `Person ${index}`;
+
+      let dotLabel = String(index);
+      if (hasCustomName) {
+        const firstChar = displayName[0].toUpperCase();
+        // If unique first letter, use it; if shared by 2+ people, use the number
+        if ((letterCounts.get(firstChar) || 0) === 1) {
+          dotLabel = firstChar;
+        }
+      }
+
       map.set(p.id, {
         id: p.id,
-        index: idx + 1,
-        displayName: p.name && p.name !== 'Unnamed Person' ? p.name : `Person ${idx + 1}`,
+        index,
+        displayName,
         color: PERSON_COLORS[idx % PERSON_COLORS.length],
+        dotLabel,
         thumbnailUrl: p.thumbnailUrl,
       });
     });
+
     return map;
   }, [people]);
 

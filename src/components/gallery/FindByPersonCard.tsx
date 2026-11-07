@@ -7,16 +7,12 @@ import { DiscoveredPerson } from '@/components/photos/FaceDiscoveryBar';
 import { MatchPanel } from './MatchPanel';
 
 export const PERSON_COLORS = [
-  'var(--pink)',
-  'var(--mint)',
-  'var(--lilac)',
-  'var(--sun)',
+  '#FFA9CB', // pink
+  '#6FD9B0', // mint
+  '#C5B4FF', // lilac
+  '#FFC83D', // sun
   '#F7B08F',
   '#9FE3F2',
-  '#F4C6A3',
-  '#BFE8A6',
-  '#F6A6A6',
-  '#D9C2FF',
 ];
 
 interface FindByPersonCardProps {

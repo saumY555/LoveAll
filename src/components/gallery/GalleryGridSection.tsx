@@ -4,11 +4,12 @@ import React from 'react';
 import Image from 'next/image';
 import { GalleryPhoto } from '@/components/photos/PhotoThumbnailCard';
 
-interface PersonMeta {
+export interface PersonMeta {
   id: string;
   index: number;
   displayName: string;
   color: string;
+  dotLabel: string;
   thumbnailUrl: string | null;
 }
 
@@ -119,13 +120,30 @@ export function GalleryGridSection({
               }
             }
 
+            // Sort ascending by person index (Person 1, Person 2, ...)
+            peopleInPhoto.sort((a, b) => a.index - b.index);
+
+            // Construct accessible label
+            let tileAriaLabel = `Photo ${idx + 1}`;
+            if (peopleInPhoto.length === 1) {
+              tileAriaLabel = `Photo with ${peopleInPhoto[0].displayName}`;
+            } else if (peopleInPhoto.length === 2) {
+              tileAriaLabel = `Photo with ${peopleInPhoto[0].displayName} and ${peopleInPhoto[1].displayName}`;
+            } else if (peopleInPhoto.length > 2) {
+              const names = peopleInPhoto.map((p) => p.displayName);
+              tileAriaLabel = `Photo with ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+            }
+
+            const visibleDots = peopleInPhoto.slice(0, 3);
+            const overflowCount = peopleInPhoto.length - 3;
+
             return (
               <li key={photo.id}>
                 <button
                   className="ph-t"
                   type="button"
                   aria-pressed={isSelected}
-                  aria-label={`Photo ${idx + 1}`}
+                  aria-label={tileAriaLabel}
                   onClick={() => {
                     if (isSelectionMode) {
                       onToggleSelectPhoto(photo.id);
@@ -140,22 +158,22 @@ export function GalleryGridSection({
                     loading="lazy"
                   />
 
-                  {/* Who was in this photo dots */}
+                  {/* Numbered person marker dots */}
                   {peopleInPhoto.length > 0 && (
-                    <span className="who">
-                      {peopleInPhoto.slice(0, 4).map((person) => (
+                    <span className="who" aria-hidden="true">
+                      {visibleDots.map((person) => (
                         <i
                           key={person.id}
                           style={{ ['--c' as any]: person.color }}
-                          title={person.displayName}
                         >
-                          {person.thumbnailUrl ? (
-                            <img src={person.thumbnailUrl} alt="" />
-                          ) : (
-                            person.index
-                          )}
+                          {person.dotLabel}
                         </i>
                       ))}
+                      {overflowCount > 0 && (
+                        <i style={{ ['--c' as any]: '#FFFFFF' }}>
+                          +{overflowCount}
+                        </i>
+                      )}
                     </span>
                   )}
 
