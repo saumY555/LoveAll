@@ -10,6 +10,7 @@ import { PolaroidPile } from '@/components/events/PolaroidPile';
 import { CoverPhotoPickerModal } from '@/components/events/CoverPhotoPickerModal';
 import { PasscodeModal } from '@/components/events/PasscodeModal';
 import { CreateEventModal } from '@/components/events/CreateEventModal';
+import { DeleteEventModal } from '@/components/events/DeleteEventModal';
 
 export default function EventsPage() {
   const { data: session, status } = useSession();
@@ -24,6 +25,7 @@ export default function EventsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isPasscodeModalOpen, setIsPasscodeModalOpen] = useState(false);
   const [selectedEventForCover, setSelectedEventForCover] = useState<EventWithRole | null>(null);
+  const [selectedEventForDelete, setSelectedEventForDelete] = useState<EventWithRole | null>(null);
 
   // Passcode inline empty state form
   const [inlinePasscode, setInlinePasscode] = useState('');
@@ -329,6 +331,7 @@ export default function EventsPage() {
                       event={event}
                       index={index}
                       onOpenCoverPicker={(ev) => setSelectedEventForCover(ev)}
+                      onOpenDeleteModal={(ev) => setSelectedEventForDelete(ev)}
                     />
                   ))}
 
@@ -432,6 +435,19 @@ export default function EventsPage() {
           event={selectedEventForCover}
           currentCoverPhotoId={selectedEventForCover.coverPhotoId || null}
           onSaveCover={handleSaveCover}
+        />
+      )}
+
+      {/* Delete / Leave Event Modal */}
+      {selectedEventForDelete && (
+        <DeleteEventModal
+          isOpen={Boolean(selectedEventForDelete)}
+          onClose={() => setSelectedEventForDelete(null)}
+          event={selectedEventForDelete}
+          onDeleted={(deletedId, message) => {
+            setEvents((prev) => prev.filter((e) => e.id !== deletedId));
+            showToast(message);
+          }}
         />
       )}
 

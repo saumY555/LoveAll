@@ -1,11 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Modal } from '@/components/ui/Modal';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Trash2, ShieldAlert, Check } from 'lucide-react';
+import { Trash2, AlertTriangle, Check, Loader2 } from 'lucide-react';
 
 export interface EventSettingsData {
   id: string;
@@ -32,21 +29,78 @@ export function EventSettingsModal({
   onEventUpdated,
 }: EventSettingsModalProps) {
   const router = useRouter();
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   const [name, setName] = useState(event.name || '');
   const [description, setDescription] = useState(event.description || '');
   const [eventDate, setEventDate] = useState(
     event.eventDate ? new Date(event.eventDate).toISOString().split('T')[0] : ''
   );
-  const [coverImage, setCoverImage] = useState(event.coverImage || '');
   const [isPrivate, setIsPrivate] = useState(event.isPrivate ?? true);
   const [allowGuestView, setAllowGuestView] = useState(event.allowGuestView ?? false);
   const [allowGuestUpload, setAllowGuestUpload] = useState(event.allowGuestUpload ?? false);
 
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Open / Close native dialog & trap focus
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    if (isOpen) {
+      previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+      if (!dialog.open) {
+        dialog.showModal();
+      }
+      setName(event.name || '');
+      setDescription(event.description || '');
+      setEventDate(event.eventDate ? new Date(event.eventDate).toISOString().split('T')[0] : '');
+      setIsPrivate(event.isPrivate ?? true);
+      setAllowGuestView(event.allowGuestView ?? false);
+      setAllowGuestUpload(event.allowGuestUpload ?? false);
+      setError(null);
+      setSuccessMessage(null);
+      setShowDeleteConfirm(false);
+      document.body.style.overflow = 'hidden';
+    } else {
+      if (dialog.open) {
+        dialog.close();
+      }
+      document.body.style.overflow = '';
+      if (previouslyFocusedRef.current) {
+        previouslyFocusedRef.current.focus();
+      }
+    }
+
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen, event]);
+
+  const handleCancel = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    onClose();
+  };
+
+  const handleDialogClick = (e: React.MouseEvent<HTMLDialogElement>) => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const rect = dialog.getBoundingClientRect();
+    const isInDialog =
+      rect.top <= e.clientY &&
+      e.clientY <= rect.top + rect.height &&
+      rect.left <= e.clientX &&
+      e.clientX <= rect.left + rect.width;
+
+    if (!isInDialog) {
+      onClose();
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,7 +121,6 @@ export function EventSettingsModal({
           name: name.trim(),
           description: description.trim() || undefined,
           eventDate: eventDate || undefined,
-          coverImage: coverImage.trim() || undefined,
           isPrivate,
           allowGuestView,
           allowGuestUpload,
@@ -81,33 +134,24 @@ export function EventSettingsModal({
         name: name.trim(),
         description: description.trim() || null,
         eventDate: eventDate || null,
-        coverImage: coverImage.trim() || null,
         isPrivate,
         allowGuestView,
         allowGuestUpload,
       });
 
-      setSuccessMessage('Event settings updated successfully.');
+      setSuccessMessage('Event settings updated!');
       setTimeout(() => {
         setSuccessMessage(null);
         onClose();
-      }, 800);
+      }, 700);
     } catch (err: unknown) {
-      setError((err as Error).message);
+      setError((err as Error).message || 'Failed to save settings');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = async () => {
-    if (
-      !confirm(
-        'Are you sure you want to delete this event? The event will enter a 7-day recovery period before assets are permanently purged.'
-      )
-    ) {
-      return;
-    }
-
     setIsDeleting(true);
     setError(null);
 
@@ -119,152 +163,342 @@ export function EventSettingsModal({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to delete event');
 
-      alert('Event soft-deleted. You can recover it within 7 days.');
+      onClose();
       router.push('/events');
     } catch (err: unknown) {
-      setError((err as Error).message);
+      setError((err as Error).message || 'Failed to delete event');
       setIsDeleting(false);
     }
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title="Event Settings"
-      description="Modify event details, visitor permissions, and lifecycle."
-      maxWidth="lg"
+    <dialog
+      ref={dialogRef}
+      className="loveall-modal"
+      onCancel={handleCancel}
+      onClick={handleDialogClick}
+      aria-labelledby="settings-title"
+      style={{ maxWidth: '580px' }}
     >
-      <div className="space-y-6">
+      <div className="dh">
+        <div>
+          <h2 id="settings-title">Event settings</h2>
+          <p>Modify event details, visitor permissions, or delete this event.</p>
+        </div>
+        <button
+          className="x"
+          type="button"
+          aria-label="Close dialog"
+          onClick={onClose}
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="db" style={{ gap: '20px' }}>
         {error && (
-          <div className="rounded-lg bg-red-50 p-3 text-xs text-red-600 dark:bg-red-950/40 dark:text-red-400">
-            {error}
+          <div
+            role="alert"
+            style={{
+              padding: '12px 16px',
+              borderRadius: '16px',
+              background: '#fee2e2',
+              border: '2px solid #ef4444',
+              color: '#991b1b',
+              fontWeight: 700,
+              fontSize: '0.9rem',
+            }}
+          >
+            ⚠️ {error}
           </div>
         )}
 
         {successMessage && (
-          <div className="rounded-lg bg-emerald-50 p-3 text-xs text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 flex items-center gap-2">
-            <Check className="w-4 h-4" />
+          <div
+            role="status"
+            style={{
+              padding: '12px 16px',
+              borderRadius: '16px',
+              background: '#dcfce7',
+              border: '2px solid #22c55e',
+              color: '#15803d',
+              fontWeight: 700,
+              fontSize: '0.9rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <Check className="w-5 h-5" />
             <span>{successMessage}</span>
           </div>
         )}
 
-        <form onSubmit={handleSave} className="space-y-4">
-          <Input
-            label="Event Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
+        <form onSubmit={handleSave} style={{ display: 'grid', gap: '16px' }}>
+          {/* Event Name */}
+          <div className="field">
+            <label htmlFor="settings-name" style={{ fontWeight: 800, fontSize: '0.95rem', display: 'block', marginBottom: '6px' }}>
+              Event name <span style={{ color: 'var(--tomato)' }}>*</span>
+            </label>
+            <input
+              id="settings-name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              style={{
+                width: '100%',
+                minHeight: '48px',
+                padding: '0 16px',
+                border: '2px solid var(--line)',
+                borderRadius: '16px',
+                background: '#fff',
+                color: 'var(--ink)',
+                font: '700 1rem var(--font-nunito), Nunito, sans-serif',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Event Date"
+          {/* Event Date */}
+          <div className="field">
+            <label htmlFor="settings-date" style={{ fontWeight: 800, fontSize: '0.95rem', display: 'block', marginBottom: '6px' }}>
+              Event date
+            </label>
+            <input
+              id="settings-date"
               type="date"
               value={eventDate}
               onChange={(e) => setEventDate(e.target.value)}
-            />
-
-            <Input
-              label="Cover Image URL"
-              type="url"
-              placeholder="https://example.com/cover.jpg"
-              value={coverImage}
-              onChange={(e) => setCoverImage(e.target.value)}
+              style={{
+                width: '100%',
+                minHeight: '48px',
+                padding: '0 16px',
+                border: '2px solid var(--line)',
+                borderRadius: '16px',
+                background: '#fff',
+                color: 'var(--ink)',
+                font: '700 1rem var(--font-nunito), Nunito, sans-serif',
+                boxSizing: 'border-box',
+              }}
             />
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-stone-700 dark:text-stone-300">
+          {/* Description */}
+          <div className="field">
+            <label htmlFor="settings-desc" style={{ fontWeight: 800, fontSize: '0.95rem', display: 'block', marginBottom: '6px' }}>
               Description
             </label>
             <textarea
+              id="settings-desc"
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full rounded-2xl border-2 border-stone-200 bg-white/90 p-3 text-xs text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-200 dark:border-stone-750 dark:bg-stone-900 dark:text-stone-100 transition-all shadow-2xs"
+              placeholder="What was this event about?"
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                border: '2px solid var(--line)',
+                borderRadius: '16px',
+                background: '#fff',
+                color: 'var(--ink)',
+                font: '600 0.95rem var(--font-nunito), Nunito, sans-serif',
+                resize: 'vertical',
+                boxSizing: 'border-box',
+              }}
             />
           </div>
 
-          {/* Access & Sharing Permissions */}
-          <div className="rounded-3xl border-2 border-purple-200/90 bg-purple-50/50 p-4.5 dark:border-purple-900/60 dark:bg-purple-950/30 space-y-3.5">
-            <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-purple-700 dark:text-purple-300">
-              Access & Sharing Permissions ✨
+          {/* Access & Sharing Permissions Card */}
+          <div
+            style={{
+              padding: '16px 18px',
+              background: 'var(--surface)',
+              border: '2px solid var(--line)',
+              borderRadius: '24px 24px 24px 10px',
+              boxShadow: '4px 4px 0 var(--line)',
+              display: 'grid',
+              gap: '12px',
+            }}
+          >
+            <h4
+              style={{
+                fontFamily: 'var(--font-bricolage), Bricolage Grotesque, sans-serif',
+                fontWeight: 800,
+                fontSize: '1rem',
+                margin: 0,
+                color: 'var(--ink)',
+              }}
+            >
+              Access & Sharing Permissions
             </h4>
 
-            <label className="flex items-center gap-3 cursor-pointer">
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
               <input
                 type="checkbox"
                 checked={isPrivate}
                 onChange={(e) => setIsPrivate(e.target.checked)}
-                className="h-4.5 w-4.5 rounded-md border-purple-300 text-purple-600 focus:ring-purple-400 accent-purple-600 cursor-pointer"
+                style={{ width: '20px', height: '20px', marginTop: '2px', accentColor: 'var(--tomato)', cursor: 'pointer' }}
               />
-              <div className="text-xs">
-                <span className="font-bold text-stone-900 dark:text-stone-100">Private Event</span>
-                <p className="text-stone-500 font-medium text-[11px]">Only invited members can access without an authorized passcode</p>
+              <div>
+                <span style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--ink)' }}>Private Event</span>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--muted)' }}>
+                  Only members or visitors with an authorized passcode can view.
+                </p>
               </div>
             </label>
 
-            <label className="flex items-center gap-3 cursor-pointer">
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
               <input
                 type="checkbox"
                 checked={allowGuestView}
                 onChange={(e) => setAllowGuestView(e.target.checked)}
-                className="h-4.5 w-4.5 rounded-md border-purple-300 text-purple-600 focus:ring-purple-400 accent-purple-600 cursor-pointer"
+                style={{ width: '20px', height: '20px', marginTop: '2px', accentColor: 'var(--tomato)', cursor: 'pointer' }}
               />
-              <div className="text-xs">
-                <span className="font-bold text-stone-900 dark:text-stone-100">Allow Guest Viewing</span>
-                <p className="text-stone-500 font-medium text-[11px]">Passcode or share link visitors can view without an account</p>
+              <div>
+                <span style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--ink)' }}>Allow Guest Viewing</span>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--muted)' }}>
+                  Visitors with a share link can view photos without an account.
+                </p>
               </div>
             </label>
 
-            <label className="flex items-center gap-3 cursor-pointer">
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
               <input
                 type="checkbox"
                 checked={allowGuestUpload}
                 onChange={(e) => setAllowGuestUpload(e.target.checked)}
-                className="h-4.5 w-4.5 rounded-md border-purple-300 text-purple-600 focus:ring-purple-400 accent-purple-600 cursor-pointer"
+                style={{ width: '20px', height: '20px', marginTop: '2px', accentColor: 'var(--tomato)', cursor: 'pointer' }}
               />
-              <div className="text-xs">
-                <span className="font-bold text-stone-900 dark:text-stone-100">Allow Guest Uploads</span>
-                <p className="text-stone-500 font-medium text-[11px]">Passcode or share link visitors can contribute photos</p>
+              <div>
+                <span style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--ink)' }}>Allow Guest Uploads</span>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--muted)' }}>
+                  Visitors with a share link can upload photos to this album.
+                </p>
               </div>
             </label>
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="ghost" size="sm" onClick={onClose} className="rounded-full">
+          {/* Form Action Buttons */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
+            <button
+              type="button"
+              className="btn sm"
+              onClick={onClose}
+              disabled={isSaving}
+              style={{ background: '#fff' }}
+            >
               Cancel
-            </Button>
-            <Button type="submit" variant="primary" size="sm" isLoading={isSaving} className="px-6 shadow-sm">
-              Save Settings ✨
-            </Button>
+            </button>
+            <button
+              type="submit"
+              className="btn go"
+              disabled={isSaving}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {isSaving ? 'Saving...' : 'Save settings'}
+            </button>
           </div>
         </form>
 
-        {/* Danger Zone: Soft Deletion */}
-        <div className="rounded-xl border border-red-200 bg-red-50/50 p-4 dark:border-red-900/60 dark:bg-red-950/20 space-y-2">
-          <div className="flex items-center gap-2 text-xs font-semibold text-red-700 dark:text-red-400">
-            <ShieldAlert className="w-4 h-4" />
-            <span>Danger Zone</span>
-          </div>
-          <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
-            Deleting an event moves it to trash with a 7-day recovery window.
-          </p>
-          <div className="pt-1">
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={handleDelete}
-              isLoading={isDeleting}
-              className="gap-1.5 text-xs"
+        {/* Danger Zone: Delete Event */}
+        <div
+          style={{
+            marginTop: '8px',
+            padding: '16px 18px',
+            background: '#FFF1EE',
+            border: '2px solid var(--line)',
+            borderRadius: '24px 24px 24px 10px',
+            boxShadow: '4px 4px 0 var(--line)',
+            display: 'grid',
+            gap: '10px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertTriangle className="w-5 h-5" style={{ color: 'var(--tomato)', flexShrink: 0 }} />
+            <h4
+              style={{
+                fontFamily: 'var(--font-bricolage), Bricolage Grotesque, sans-serif',
+                fontWeight: 800,
+                fontSize: '1.05rem',
+                margin: 0,
+                color: 'var(--tomato)',
+              }}
             >
-              <Trash2 className="w-3.5 h-3.5" />
-              Delete Event (7-day recovery)
-            </Button>
+              Danger Zone
+            </h4>
           </div>
+
+          <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--ink)', fontWeight: 600, lineHeight: 1.4 }}>
+            Deleting this event moves it and all photos into the trash with a{' '}
+            <strong>7-day recovery period</strong>.
+          </p>
+
+          {!showDeleteConfirm ? (
+            <div>
+              <button
+                type="button"
+                className="btn sm"
+                onClick={() => setShowDeleteConfirm(true)}
+                style={{
+                  background: 'var(--tomato)',
+                  color: '#fff',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  borderColor: 'var(--line)',
+                }}
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete this event
+              </button>
+            </div>
+          ) : (
+            <div
+              style={{
+                background: '#fff',
+                border: '2px solid var(--line)',
+                borderRadius: '16px',
+                padding: '12px 14px',
+                display: 'grid',
+                gap: '10px',
+              }}
+            >
+              <p style={{ margin: 0, fontWeight: 800, fontSize: '0.9rem', color: 'var(--ink)' }}>
+                Are you sure? This action will remove the event immediately.
+              </p>
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="btn sm"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={isDeleting}
+                  style={{ background: '#fff' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn sm"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  style={{
+                    background: 'var(--tomato)',
+                    color: '#fff',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  {isDeleting ? 'Deleting...' : 'Yes, delete event'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-    </Modal>
+    </dialog>
   );
 }

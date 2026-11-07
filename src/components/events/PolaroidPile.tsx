@@ -3,16 +3,21 @@
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Camera } from 'lucide-react';
+import { Camera, Trash2, LogOut } from 'lucide-react';
 import { EventWithRole } from '@/types';
 
 interface PolaroidPileProps {
   event: EventWithRole;
   onOpenCoverPicker: (event: EventWithRole) => void;
+  onOpenDeleteModal: (event: EventWithRole) => void;
   index: number;
 }
 
-export function PolaroidPile({ event, onOpenCoverPicker }: PolaroidPileProps) {
+export function PolaroidPile({
+  event,
+  onOpenCoverPicker,
+  onOpenDeleteModal,
+}: PolaroidPileProps) {
   const photoCount = event._count?.photos || 0;
   const memberCount = event._count?.members || 1;
   const roleLabel = event.userRole === 'OWNER' ? 'Host' : 'Member';
@@ -84,6 +89,25 @@ export function PolaroidPile({ event, onOpenCoverPicker }: PolaroidPileProps) {
               </span>
             </div>
           </Link>
+
+          {/* Delete or Leave Button (Bottom-left corner on top-polaroid) */}
+          <button
+            type="button"
+            className="del-btn"
+            aria-label={event.userRole === 'OWNER' ? `Delete ${event.name}` : `Leave ${event.name}`}
+            title={event.userRole === 'OWNER' ? `Delete ${event.name}` : `Leave ${event.name}`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onOpenDeleteModal(event);
+            }}
+          >
+            {event.userRole === 'OWNER' ? (
+              <Trash2 className="w-5 h-5" />
+            ) : (
+              <LogOut className="w-5 h-5" />
+            )}
+          </button>
 
           {/* Change Cover Camera Button (Sibling to Link on top-polaroid corner) */}
           <button

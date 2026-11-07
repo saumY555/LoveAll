@@ -2,6 +2,7 @@
 @import "../styles/landing.css";
 @import "../styles/signin.css";
 @import "../styles/events.css";
+@import "../styles/gallery.css";
 
 :root {
   /* loveall design tokens */

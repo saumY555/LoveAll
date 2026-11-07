@@ -328,13 +328,16 @@
     transform: rotate(9deg) translate(10px, -2px);
   }
   
-  .loveall-events .cover-btn {
+  .loveall-events .cover-btn,
+  .loveall-events .del-btn {
     opacity: 0;
     pointer-events: none;
     transition: opacity .15s, transform .15s, box-shadow .15s;
   }
   .loveall-events .pile-wrap:hover .cover-btn,
-  .loveall-events .pile-wrap:focus-within .cover-btn {
+  .loveall-events .pile-wrap:focus-within .cover-btn,
+  .loveall-events .pile-wrap:hover .del-btn,
+  .loveall-events .pile-wrap:focus-within .del-btn {
     opacity: 1;
     pointer-events: auto;
   }
@@ -430,6 +433,38 @@
   opacity: .5;
   cursor: not-allowed;
   filter: grayscale(0.6);
+}
+
+/* Delete / Leave event coral button positioned on top polaroid bottom-left */
+.loveall-events .del-btn {
+  position: absolute;
+  left: 0px;
+  bottom: 8px;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: #FFF1EE;
+  color: var(--tomato);
+  cursor: pointer;
+  box-shadow: 2px 2px 0 var(--line);
+  touch-action: manipulation;
+  transition: transform .15s, box-shadow .15s, background .15s, color .15s;
+}
+
+.loveall-events .del-btn:hover {
+  background: var(--tomato);
+  color: #fff;
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--line);
+}
+
+.loveall-events .del-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 var(--line);
 }
 
 /* New Event Tile */
