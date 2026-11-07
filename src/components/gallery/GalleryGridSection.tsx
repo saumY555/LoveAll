@@ -21,6 +21,7 @@ interface GalleryGridSectionProps {
   isSelectionMode: boolean;
   selectedPhotoIds: string[];
   isDownloadingZip: boolean;
+  isPhotosLoading?: boolean;
   onToggleSelectionMode: () => void;
   onToggleSelectPhoto: (photoId: string) => void;
   onDownloadZip: () => void;
@@ -36,6 +37,7 @@ export function GalleryGridSection({
   isSelectionMode,
   selectedPhotoIds,
   isDownloadingZip,
+  isPhotosLoading = false,
   onToggleSelectionMode,
   onToggleSelectPhoto,
   onDownloadZip,
@@ -78,16 +80,26 @@ export function GalleryGridSection({
       </div>
 
       {photoCount === 0 ? (
-        <div className="none" id="none" style={{ display: 'block' }}>
-          <h3>No photos match</h3>
-          <p>
-            {filterMode === 'together'
-              ? 'Nobody was caught in a photo together yet. Try Either, or pick different people.'
-              : 'No photos match this person filter yet. Try picking different people.'}
-          </p>
-        </div>
+        isPhotosLoading ? (
+          <div style={{ textAlign: 'center', padding: '40px 0', fontWeight: 700, color: 'var(--muted)' }}>
+            Finding matching photos…
+          </div>
+        ) : (
+          <div className="none" id="none" style={{ display: 'block' }}>
+            <h3>No photos match</h3>
+            <p>
+              {filterMode === 'together'
+                ? 'Nobody was caught in a photo together yet. Try Either, or pick different people.'
+                : 'No photos match this person filter yet. Try picking different people.'}
+            </p>
+          </div>
+        )
       ) : (
-        <ul className={`mosaic${isSelectionMode ? ' sm-on' : ''}`} id="mosaic">
+        <ul
+          className={`mosaic${isSelectionMode ? ' sm-on' : ''}`}
+          id="mosaic"
+          style={{ opacity: isPhotosLoading ? 0.6 : 1, transition: 'opacity .15s' }}
+        >
           {photos.map((photo, idx) => {
             const isSelected = selectedPhotoIds.includes(photo.id);
 

@@ -38,6 +38,7 @@ export default function EventDetailPage({
   const [people, setPeople] = useState<DiscoveredPerson[]>([]);
   const [totalPhotosCount, setTotalPhotosCount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPhotosLoading, setIsPhotosLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Selection & Filter State
@@ -105,8 +106,29 @@ export default function EventDetailPage({
     }
   }, [eventId]);
 
-  // Fetch Filtered Photos
+  // Initial mount: load event and people once
+  useEffect(() => {
+    let ignore = false;
+    async function init() {
+      setIsLoading(true);
+      setError(null);
+      try {
+        await Promise.all([fetchEvent(), fetchPeople()]);
+      } catch (err: unknown) {
+        if (!ignore) setError((err as Error).message);
+      } finally {
+        if (!ignore) setIsLoading(false);
+      }
+    }
+    init();
+    return () => {
+      ignore = true;
+    };
+  }, [eventId, fetchEvent, fetchPeople]);
+
+  // Fetch Photos whenever selectedPersonIds or filterMode changes
   const fetchPhotos = useCallback(async () => {
+    setIsPhotosLoading(true);
     try {
       const query = new URLSearchParams({ limit: '500' });
       if (selectedPersonIds.length > 0) {
@@ -119,36 +141,17 @@ export default function EventDetailPage({
       const data = await res.json();
       if (res.ok) {
         setPhotos(data.photos || []);
-        // If not filtered, update total count
         if (selectedPersonIds.length === 0) {
           setTotalPhotosCount(data.pagination?.totalCount ?? data.photos?.length ?? 0);
         }
-      } else {
-        throw new Error(data.error || 'Failed to load photos');
       }
     } catch (err: unknown) {
       console.warn('Failed to load photos:', err);
+    } finally {
+      setIsPhotosLoading(false);
     }
   }, [eventId, selectedPersonIds, filterMode]);
 
-  // Initial Load
-  const loadAll = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      await Promise.all([fetchEvent(), fetchPeople(), fetchPhotos()]);
-    } catch (err: unknown) {
-      setError((err as Error).message);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [fetchEvent, fetchPeople, fetchPhotos]);
-
-  useEffect(() => {
-    loadAll();
-  }, [loadAll]);
-
-  // Re-fetch photos when person selection or filter mode changes
   useEffect(() => {
     fetchPhotos();
   }, [fetchPhotos]);
@@ -266,7 +269,10 @@ export default function EventDetailPage({
               type="button"
               className="btn sm"
               style={{ marginTop: '16px', background: '#fff' }}
-              onClick={loadAll}
+              onClick={() => {
+                fetchEvent();
+                fetchPeople();
+              }}
             >
               Try again
             </button>
@@ -326,6 +332,7 @@ export default function EventDetailPage({
             isSelectionMode={isSelectionMode}
             selectedPhotoIds={selectedPhotoIds}
             isDownloadingZip={isDownloadingZip}
+            isPhotosLoading={isPhotosLoading}
             onToggleSelectionMode={() => {
               if (isSelectionMode) {
                 setIsSelectionMode(false);
