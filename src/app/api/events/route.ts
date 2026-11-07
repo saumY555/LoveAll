@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'node:crypto';
 import { getAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { EventRole } from '@prisma/client';
@@ -143,6 +144,24 @@ export async function POST(req: NextRequest) {
           eventId: event.id,
           userId,
           role: EventRole.OWNER,
+        },
+      });
+
+      // Generate a default 6-character readable passcode for the new event
+      const chars = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+      const bytes = crypto.randomBytes(6);
+      let defaultToken = '';
+      for (let i = 0; i < 6; i++) {
+        defaultToken += chars[bytes[i] % chars.length];
+      }
+
+      await tx.shareLink.create({
+        data: {
+          eventId: event.id,
+          token: defaultToken,
+          canView: true,
+          canUpload: allowGuestUpload,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days default
         },
       });
 

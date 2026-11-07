@@ -38,6 +38,7 @@ export function ShareModal({
   const [links, setLinks] = useState<ShareLinkItem[]>([]);
   const [latestToken, setLatestToken] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [isFetchingLinks, setIsFetchingLinks] = useState(false);
 
   // New passcode form state
   const [customPasscode, setCustomPasscode] = useState('');
@@ -111,6 +112,7 @@ export function ShareModal({
 
     let ignore = false;
     async function fetchLinks() {
+      setIsFetchingLinks(true);
       try {
         const res = await fetch(`/api/events/${eventId}/share-links`);
         const data = await res.json();
@@ -120,10 +122,30 @@ export function ShareModal({
           const firstActive = fetchedLinks.find((l) => !l.isRevoked);
           if (firstActive) {
             setLatestToken(firstActive.token);
+          } else if (isOwner) {
+            // Auto-create initial default passcode if none exists
+            const createRes = await fetch(`/api/events/${eventId}/share-links`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                canView: true,
+                canUpload: true,
+                expiresInDays: 7,
+              }),
+            });
+            const createData = await createRes.json();
+            if (!ignore && createRes.ok && createData.shareLink) {
+              setLinks([createData.shareLink]);
+              setLatestToken(createData.shareLink.token);
+            }
           }
         }
       } catch (err) {
         console.warn('Failed to load share links:', err);
+      } finally {
+        if (!ignore) {
+          setIsFetchingLinks(false);
+        }
       }
     }
 
@@ -131,7 +153,7 @@ export function ShareModal({
     return () => {
       ignore = true;
     };
-  }, [isOpen, eventId]);
+  }, [isOpen, eventId, isOwner]);
 
   // Generate QR code when active token changes
   useEffect(() => {
@@ -320,7 +342,17 @@ export function ShareModal({
             <div className="card code">
               <div>
                 <small>Event passcode</small>
-                <strong id="pcode">{latestToken || 'NO CODE'}</strong>
+                <strong
+                  id="pcode"
+                  style={{
+                    fontSize: latestToken
+                      ? 'clamp(2.2rem, 11vw, 3.2rem)'
+                      : 'clamp(1.3rem, 5vw, 1.8rem)',
+                    letterSpacing: latestToken ? '.14em' : 'normal',
+                  }}
+                >
+                  {latestToken ? latestToken : isFetchingLinks ? 'GENERATING…' : 'NO CODE'}
+                </strong>
               </div>
               <button
                 className="btn go"
@@ -340,7 +372,7 @@ export function ShareModal({
                     <img src={qrDataUrl} alt="QR code to join the event" />
                   ) : (
                     <div style={{ padding: '40px 0', textAlign: 'center', fontSize: '0.85rem' }}>
-                      Generating QR…
+                      {isFetchingLinks ? 'Generating QR…' : 'No active QR code'}
                     </div>
                   )}
                 </div>
@@ -356,7 +388,12 @@ export function ShareModal({
                     <span className="sr" style={{ position: 'absolute', left: '-9999px' }}>
                       Guest link
                     </span>
-                    <input id="glink" readOnly value={shareUrl} />
+                    <input
+                      id="glink"
+                      readOnly
+                      placeholder={isFetchingLinks ? 'Generating link…' : ''}
+                      value={shareUrl}
+                    />
                   </label>
                   <button
                     className="btn sm mint"
@@ -371,6 +408,15 @@ export function ShareModal({
                 <div className="perms">
                   {activeLink?.canView && <span className="pill">Guests can view</span>}
                   {activeLink?.canUpload && <span className="pill">Guests can upload</span>}
+                  {activeLink?.expiresAt ? (
+                    <span className="pill" style={{ background: 'var(--sun)' }}>
+                      Expires in {Math.max(1, Math.ceil((new Date(activeLink.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} days
+                    </span>
+                  ) : activeLink ? (
+                    <span className="pill" style={{ background: 'var(--lilac)' }}>
+                      No expiry
+                    </span>
+                  ) : null}
                 </div>
 
                 <button
