@@ -96,18 +96,27 @@ const providers = [
     },
   }),
 
-  // 2. Dev 1-Click Quick Login Provider
+  // 2. Dev 1-Click Quick Login Provider (Passcode Protected)
   Credentials({
     id: 'dev-login',
     name: 'Development Quick Login',
     credentials: {
       email: { label: 'Email', type: 'email', placeholder: 'alice@example.com' },
       name: { label: 'Name', type: 'text', placeholder: 'Alice Cooper' },
+      passcode: { label: 'Passcode', type: 'password' },
     },
     async authorize(credentials) {
       if (!credentials?.email) return null;
       const email = String(credentials.email).toLowerCase().trim();
       const name = credentials.name ? String(credentials.name).trim() : email.split('@')[0];
+
+      const expectedPasscode =
+        process.env.DEMO_ACCOUNTS_PASSCODE || process.env.DEMO_PASSCODE || 'loveall';
+      const providedPasscode = String(credentials?.passcode || '').trim();
+
+      if (!providedPasscode || providedPasscode !== expectedPasscode) {
+        throw new Error('Incorrect passcode for demo accounts');
+      }
 
       try {
         let user = await prisma.user.findUnique({

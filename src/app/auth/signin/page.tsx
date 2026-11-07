@@ -124,18 +124,27 @@ export default function SignInPage() {
     }
   };
 
-  const handleDevSignIn = async (devEmail: string, devName: string) => {
+  const handleDevSignIn = async (devEmail: string, devName: string, passcode: string) => {
     setIsDevLoading(true);
     setError(null);
     try {
-      await signIn('dev-login', {
+      const res = await signIn('dev-login', {
         email: devEmail,
         name: devName,
-        callbackUrl: '/events',
+        passcode: passcode.trim(),
+        redirect: false,
       });
+
+      if (res?.error) {
+        throw new Error('Incorrect passcode for demo accounts.');
+      }
+
+      router.push('/events');
     } catch (err: unknown) {
-      setError((err as Error).message);
+      const msg = (err as Error).message || 'Failed to sign in to demo account';
+      setError(msg);
       setIsDevLoading(false);
+      throw new Error(msg);
     }
   };
 

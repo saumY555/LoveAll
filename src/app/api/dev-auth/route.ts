@@ -16,6 +16,15 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
+    const expectedPasscode =
+      process.env.DEMO_ACCOUNTS_PASSCODE || process.env.DEMO_PASSCODE || 'loveall';
+    if (body.passcode !== expectedPasscode) {
+      return NextResponse.json(
+        { error: 'Incorrect passcode for demo accounts' },
+        { status: 401 }
+      );
+    }
+
     const email = body.email ? String(body.email).toLowerCase().trim() : 'alice@example.com';
     const name = body.name ? String(body.name).trim() : 'Alice Cooper';
 
