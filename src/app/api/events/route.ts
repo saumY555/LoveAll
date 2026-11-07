@@ -11,8 +11,8 @@ const createEventSchema = z.object({
   coverImage: z.string().url().optional().or(z.literal('')),
   eventDate: z.string().optional().or(z.literal('')),
   isPrivate: z.boolean().default(true),
-  allowGuestView: z.boolean().default(false),
-  allowGuestUpload: z.boolean().default(false),
+  allowGuestView: z.boolean().default(true),
+  allowGuestUpload: z.boolean().default(true),
 });
 
 /**

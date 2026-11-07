@@ -22,8 +22,8 @@ export function CreateEventModal({ isOpen, onClose, onEventCreated }: CreateEven
   const [coverImage, setCoverImage] = useState('');
   const [description, setDescription] = useState('');
   const [isPrivate, setIsPrivate] = useState(true);
-  const [allowGuestView, setAllowGuestView] = useState(false);
-  const [allowGuestUpload, setAllowGuestUpload] = useState(false);
+  const [allowGuestView, setAllowGuestView] = useState(true);
+  const [allowGuestUpload, setAllowGuestUpload] = useState(true);
 
   // Validation & UI State
   const [isNameBad, setIsNameBad] = useState(false);
@@ -159,8 +159,8 @@ export function CreateEventModal({ isOpen, onClose, onEventCreated }: CreateEven
       setCoverImage('');
       setDescription('');
       setIsPrivate(true);
-      setAllowGuestView(false);
-      setAllowGuestUpload(false);
+      setAllowGuestView(true);
+      setAllowGuestUpload(true);
       setIsNameBad(false);
 
       if (onEventCreated) {

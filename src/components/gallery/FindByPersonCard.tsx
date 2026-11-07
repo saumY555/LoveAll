@@ -67,6 +67,22 @@ export function FindByPersonCard({
         <span className="tag" id="pn">
           {people.length} {people.length === 1 ? 'person' : 'people'}
         </span>
+        {isScanning && (
+          <span
+            className="tag"
+            style={{
+              background: 'var(--tomato)',
+              color: '#fff',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              border: '2px solid var(--ink)',
+            }}
+          >
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <span>Grouping faces in background…</span>
+          </span>
+        )}
       </div>
       <p className="hint">Tap a friend. Tap two to see photos of them together.</p>
 

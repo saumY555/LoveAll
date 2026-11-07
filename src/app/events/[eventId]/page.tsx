@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useMemo, use } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef, use } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
+import { Loader2 } from 'lucide-react';
 import '@/styles/gallery.css';
 
 import { EventWithRole } from '@/types';
@@ -18,7 +19,7 @@ import { GalleryMobileDock } from '@/components/gallery/GalleryMobileDock';
 import { MemberManagerModal } from '@/components/events/MemberManagerModal';
 import { EventSettingsModal } from '@/components/events/EventSettingsModal';
 import { ShareModal } from '@/components/events/ShareModal';
-import { UploadDropzoneModal } from '@/components/photos/UploadDropzoneModal';
+import { UploadDropzoneModal, UploadProgressInfo } from '@/components/photos/UploadDropzoneModal';
 import { PhotoLightboxModal } from '@/components/photos/PhotoLightboxModal';
 import { PrivacyConsentModal } from '@/components/events/PrivacyConsentModal';
 import { RenamePersonModal } from '@/components/photos/RenamePersonModal';
@@ -50,6 +51,31 @@ export default function EventDetailPage({
 
   // Background Face Scan State
   const [isScanning, setIsScanning] = useState(false);
+  const isScanningRef = useRef(false);
+  useEffect(() => {
+    isScanningRef.current = isScanning;
+  }, [isScanning]);
+
+  // Live Background Upload State
+  const [uploadProgress, setUploadProgress] = useState<UploadProgressInfo>({
+    isUploading: false,
+    totalCount: 0,
+    completedCount: 0,
+    errorCount: 0,
+    progressPercent: 0,
+  });
+
+  // Short Confirmation Toast State
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToastMessage(msg);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage(null);
+    }, 3200);
+  }, []);
 
   // Modals
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
@@ -133,7 +159,7 @@ export default function EventDetailPage({
     }
   }, [eventId]);
 
-  // Initial mount: load event and people once
+  // Initial mount: load event, people, and auto-check face scan status
   useEffect(() => {
     let ignore = false;
     async function init() {
@@ -141,6 +167,14 @@ export default function EventDetailPage({
       setError(null);
       try {
         await Promise.all([fetchEvent(), fetchPeople()]);
+        // Auto-check face scanning status
+        const statusRes = await fetch(`/api/events/${eventId}/faces/status`);
+        if (!ignore && statusRes.ok) {
+          const statusData = await statusRes.json();
+          if (statusData.isScanning || statusData.pending > 0 || statusData.processing > 0) {
+            setIsScanning(true);
+          }
+        }
       } catch (err: unknown) {
         if (!ignore) setError((err as Error).message);
       } finally {
@@ -190,16 +224,16 @@ export default function EventDetailPage({
       if (!res.ok) return;
       const data = await res.json();
 
-      if (data.isScanning) {
+      if (data.isScanning || data.pending > 0 || data.processing > 0) {
         setIsScanning(true);
-      } else if (isScanning) {
+      } else if (isScanningRef.current) {
         setIsScanning(false);
         await Promise.all([fetchPeople(), fetchPhotos()]);
       }
     } catch {
       // Ignored
     }
-  }, [eventId, isScanning, fetchPeople, fetchPhotos]);
+  }, [eventId, fetchPeople, fetchPhotos]);
 
   useEffect(() => {
     if (!isScanning) return;
@@ -208,20 +242,27 @@ export default function EventDetailPage({
   }, [isScanning, pollScanStatus]);
 
   // Trigger Face Scan
-  const handleRunFaceScan = async () => {
-    setIsScanning(true);
-    try {
-      const res = await fetch(`/api/events/${eventId}/faces/scan`, {
-        method: 'POST',
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to queue face scan');
-      await pollScanStatus();
-    } catch (err: unknown) {
-      alert((err as Error).message);
-      setIsScanning(false);
-    }
-  };
+  const handleRunFaceScan = useCallback(
+    async (showAlert = true) => {
+      setIsScanning(true);
+      try {
+        const res = await fetch(`/api/events/${eventId}/faces/scan`, {
+          method: 'POST',
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          if (showAlert) alert(data.error || 'Failed to queue face scan');
+          setIsScanning(false);
+          return;
+        }
+        await pollScanStatus();
+      } catch (err: unknown) {
+        if (showAlert) alert((err as Error).message);
+        setIsScanning(false);
+      }
+    },
+    [eventId, pollScanStatus]
+  );
 
   // Toggle Person Filter
   const handleTogglePerson = (personId: string) => {
@@ -394,11 +435,125 @@ export default function EventDetailPage({
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
         eventId={event.id}
+        onUploadProgress={(progress) => {
+          setUploadProgress(progress);
+        }}
+        onPhotoUploaded={() => {
+          fetchPhotos();
+        }}
         onUploadComplete={() => {
           fetchPhotos();
           fetchPeople();
+          showToast(
+            `Uploaded ${uploadProgress.totalCount || 'photos'} successfully! Grouping faces in background…`
+          );
+          // Automatically start face grouping in background without needing user to click
+          handleRunFaceScan(false);
         }}
       />
+
+      {/* Floating Background Upload Card (visible when modal is closed during upload) */}
+      {uploadProgress.isUploading && !isUploadModalOpen && (
+        <aside
+          className="bg-upload-card"
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              background: 'var(--tomato)',
+              border: '2px solid var(--ink)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <Loader2 className="w-4 h-4 text-white animate-spin" />
+          </div>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: '0.84rem',
+                fontWeight: 800,
+                color: 'var(--ink)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              Uploading {uploadProgress.completedCount} of {uploadProgress.totalCount}…
+            </div>
+            <div
+              style={{
+                width: '100%',
+                height: '7px',
+                background: '#EAE1D9',
+                borderRadius: '999px',
+                overflow: 'hidden',
+                marginTop: '5px',
+                border: '1.5px solid var(--ink)',
+              }}
+            >
+              <div
+                style={{
+                  height: '100%',
+                  background: 'var(--mint)',
+                  width: `${uploadProgress.progressPercent}%`,
+                  transition: 'width 0.2s ease',
+                }}
+              />
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="btn sm"
+            style={{
+              padding: '6px 12px',
+              fontSize: '0.8rem',
+              background: '#fff',
+              flexShrink: 0,
+            }}
+            onClick={() => setIsUploadModalOpen(true)}
+          >
+            View
+          </button>
+        </aside>
+      )}
+
+      {/* Floating Confirmation Toast */}
+      {toastMessage && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'var(--mint)',
+            color: 'var(--on)',
+            border: '2px solid var(--ink)',
+            boxShadow: '4px 4px 0 var(--ink)',
+            borderRadius: '999px',
+            padding: '10px 22px',
+            fontWeight: 800,
+            fontSize: '0.92rem',
+            zIndex: 60,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            pointerEvents: 'none',
+          }}
+        >
+          <span>{toastMessage}</span>
+        </div>
+      )}
 
       <PhotoLightboxModal
         photos={photos}

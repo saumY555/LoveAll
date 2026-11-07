@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'node:crypto';
 import { getAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { requireEventRole } from '@/lib/permissions';
+import { checkEventAccess, requireEventRole } from '@/lib/permissions';
 import { EventRole } from '@prisma/client';
 import { z } from 'zod';
 
 const createShareLinkSchema = z.object({
   canView: z.boolean().default(true),
-  canUpload: z.boolean().default(false),
+  canUpload: z.boolean().default(true),
   expiresInDays: z.number().int().positive().nullable().optional(),
   customPasscode: z.string().trim().min(3).max(30).optional(),
 });
@@ -34,23 +34,63 @@ export async function GET(
 ) {
   try {
     const { eventId } = await params;
-    const session = await getAuthSession();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    let session = null;
+    try {
+      session = await getAuthSession();
+    } catch {
+      // Ignored
     }
+    const userId = session?.user?.id;
+    const guestToken =
+      _req.cookies.get(`guest_token_${eventId}`)?.value || _req.headers.get('x-guest-token');
 
-    const roleCheck = await requireEventRole(eventId, session.user.id, [EventRole.OWNER, EventRole.MEMBER]);
-    if (!roleCheck.allowed) {
+    const access = await checkEventAccess(eventId, userId, { guestToken });
+    if (!access.hasAccess) {
       return NextResponse.json(
-        { error: roleCheck.error || 'Only the event owner can manage share links' },
-        { status: roleCheck.statusCode || 403 }
+        { error: access.error || 'Access denied' },
+        { status: access.statusCode || 403 }
       );
     }
 
-    const shareLinks = await prisma.shareLink.findMany({
+    let shareLinks = await prisma.shareLink.findMany({
       where: { eventId },
       orderBy: { createdAt: 'desc' },
     });
+
+    // If no active, unrevoked share link exists for this event, auto-create a standard default passcode
+    const hasActive = shareLinks.some(
+      (l) => !l.isRevoked && (!l.expiresAt || new Date(l.expiresAt) > new Date())
+    );
+    if (!hasActive) {
+      let defaultToken = '';
+      let attempts = 0;
+      while (attempts < 5) {
+        const candidate = generateReadablePasscode();
+        const existing = await prisma.shareLink.findUnique({
+          where: { token: candidate },
+        });
+        if (!existing) {
+          defaultToken = candidate;
+          break;
+        }
+        attempts++;
+      }
+      if (!defaultToken) {
+        defaultToken = crypto.randomBytes(3).toString('hex').toUpperCase();
+      }
+
+      const newLink = await prisma.shareLink.create({
+        data: {
+          eventId,
+          token: defaultToken,
+          canView: true,
+          canUpload: access.event?.allowGuestUpload ?? true,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days default
+        },
+      });
+
+      shareLinks = [newLink, ...shareLinks];
+    }
 
     return NextResponse.json({ shareLinks });
   } catch (err: unknown) {

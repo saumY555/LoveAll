@@ -22,11 +22,21 @@ export interface FileUploadItem {
   error?: string;
 }
 
+export interface UploadProgressInfo {
+  isUploading: boolean;
+  totalCount: number;
+  completedCount: number;
+  errorCount: number;
+  progressPercent: number;
+}
+
 interface UploadDropzoneModalProps {
   isOpen: boolean;
   onClose: () => void;
   eventId: string;
   onUploadComplete?: () => void;
+  onPhotoUploaded?: () => void;
+  onUploadProgress?: (progress: UploadProgressInfo) => void;
 }
 
 interface UploadItemRowProps {
@@ -122,6 +132,8 @@ export function UploadDropzoneModal({
   onClose,
   eventId,
   onUploadComplete,
+  onPhotoUploaded,
+  onUploadProgress,
 }: UploadDropzoneModalProps) {
   const [items, setItems] = useState<FileUploadItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -213,6 +225,24 @@ export function UploadDropzoneModal({
     });
   }, []);
 
+  const notifyProgress = useCallback(
+    (currentItems: FileUploadItem[], uploading: boolean) => {
+      if (!onUploadProgress) return;
+      const done = currentItems.filter((i) => i.status === 'done').length;
+      const err = currentItems.filter((i) => i.status === 'error').length;
+      const total = currentItems.length;
+      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+      onUploadProgress({
+        isUploading: uploading,
+        totalCount: total,
+        completedCount: done,
+        errorCount: err,
+        progressPercent: pct,
+      });
+    },
+    [onUploadProgress]
+  );
+
   // Upload an individual item with throttled XHR progress updates
   const uploadSingleItem = useCallback((item: FileUploadItem): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -255,31 +285,39 @@ export function UploadDropzoneModal({
           try {
             const data = JSON.parse(xhr.responseText);
             if (data.errors && data.errors.length > 0) {
-              setItems((prev) =>
-                prev.map((i) =>
+              const errReason = data.errors[0].reason || 'Upload failed';
+              setItems((prev) => {
+                const next = prev.map((i) =>
                   i.id === item.id
-                    ? { ...i, status: 'error', error: data.errors[0].reason }
+                    ? { ...i, status: 'error' as const, error: errReason }
                     : i
-                )
-              );
+                );
+                notifyProgress(next, true);
+                return next;
+              });
               resolve(false);
               return;
             }
 
-            setItems((prev) =>
-              prev.map((i) =>
-                i.id === item.id ? { ...i, status: 'done', progress: 100 } : i
-              )
-            );
+            setItems((prev) => {
+              const next = prev.map((i) =>
+                i.id === item.id ? { ...i, status: 'done' as const, progress: 100 } : i
+              );
+              notifyProgress(next, true);
+              return next;
+            });
+            onPhotoUploaded?.();
             resolve(true);
           } catch {
-            setItems((prev) =>
-              prev.map((i) =>
+            setItems((prev) => {
+              const next = prev.map((i) =>
                 i.id === item.id
-                  ? { ...i, status: 'error', error: 'Invalid response from server' }
+                  ? { ...i, status: 'error' as const, error: 'Invalid response from server' }
                   : i
-              )
-            );
+              );
+              notifyProgress(next, true);
+              return next;
+            });
             resolve(false);
           }
         } else {
@@ -290,35 +328,40 @@ export function UploadDropzoneModal({
           } catch {
             // fallback
           }
-          setItems((prev) =>
-            prev.map((i) =>
-              i.id === item.id ? { ...i, status: 'error', error: errorMsg } : i
-            )
-          );
+          setItems((prev) => {
+            const next = prev.map((i) =>
+              i.id === item.id ? { ...i, status: 'error' as const, error: errorMsg } : i
+            );
+            notifyProgress(next, true);
+            return next;
+          });
           resolve(false);
         }
       };
 
       xhr.onerror = () => {
-        setItems((prev) =>
-          prev.map((i) =>
+        setItems((prev) => {
+          const next = prev.map((i) =>
             i.id === item.id
-              ? { ...i, status: 'error', error: 'Network error during upload' }
+              ? { ...i, status: 'error' as const, error: 'Network error during upload' }
               : i
-          )
-        );
+          );
+          notifyProgress(next, true);
+          return next;
+        });
         resolve(false);
       };
 
       xhr.send(formData);
     });
-  }, [eventId]);
+  }, [eventId, notifyProgress, onPhotoUploaded]);
 
   const handleStartUpload = async () => {
     const queuedItems = items.filter((i) => i.status === 'queued' || i.status === 'error');
     if (queuedItems.length === 0) return;
 
     setIsUploading(true);
+    notifyProgress(items, true);
 
     // Upload files in a parallel pool of 3 concurrent uploads for high throughput
     const CONCURRENCY = 3;
@@ -342,6 +385,10 @@ export function UploadDropzoneModal({
     await Promise.all(workers);
 
     setIsUploading(false);
+    setItems((finalItems) => {
+      notifyProgress(finalItems, false);
+      return finalItems;
+    });
     if (onUploadComplete) {
       onUploadComplete();
     }
@@ -355,9 +402,7 @@ export function UploadDropzoneModal({
   return (
     <Modal
       isOpen={isOpen}
-      onClose={() => {
-        if (!isUploading) onClose();
-      }}
+      onClose={onClose}
       title="Upload Photos to Shared Gallery"
       description="Add pictures to this event. High-resolution originals are preserved, and optimized previews are generated automatically."
       maxWidth="lg"
@@ -474,21 +519,29 @@ export function UploadDropzoneModal({
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              disabled={isUploading}
-            >
-              {completedCount > 0 && completedCount === totalCount ? 'Close' : 'Cancel'}
-            </Button>
+            {isUploading ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onClose}
+              >
+                Upload in background
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+              >
+                {completedCount > 0 && completedCount === totalCount ? 'Close' : 'Cancel'}
+              </Button>
+            )}
 
-            {queuedCount > 0 && (
+            {queuedCount > 0 && !isUploading && (
               <Button
                 variant="primary"
                 size="sm"
                 onClick={handleStartUpload}
-                isLoading={isUploading}
                 disabled={items.length === 0}
               >
                 Upload {queuedCount} Photo{queuedCount === 1 ? '' : 's'}
