@@ -1,23 +1,7 @@
-/* eslint-disable @next/next/no-img-element */
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
-import { Modal } from '@/components/ui/Modal';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
-import {
-  Share2,
-  Copy,
-  Check,
-  QrCode as QrIcon,
-  Download,
-  UploadCloud,
-  Eye,
-  Loader2,
-  Ban,
-  KeyRound,
-} from 'lucide-react';
 
 interface ShareLinkItem {
   id: string;
@@ -34,6 +18,7 @@ interface ShareModalProps {
   onClose: () => void;
   eventId: string;
   eventName: string;
+  isOwner?: boolean;
 }
 
 export function ShareModal({
@@ -41,24 +26,37 @@ export function ShareModal({
   onClose,
   eventId,
   eventName,
+  isOwner = true,
 }: ShareModalProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  // Active Tab: 'share' | 'passcodes'
+  const [activeTab, setActiveTab] = useState<'share' | 'passcodes'>('share');
+
+  // Share links data
   const [links, setLinks] = useState<ShareLinkItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
-  const [revokingId, setRevokingId] = useState<string | null>(null);
-
-  // New link options
-  const [canView, setCanView] = useState(true);
-  const [canUpload, setCanUpload] = useState(true);
-  const [expiresInDays, setExpiresInDays] = useState<number | null>(7);
-  const [customPasscode, setCustomPasscode] = useState('');
-
-  // Generated link details
   const [latestToken, setLatestToken] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [copiedPasscode, setCopiedPasscode] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  // New passcode form state
+  const [customPasscode, setCustomPasscode] = useState('');
+  const [expiresOption, setExpiresOption] = useState('7');
+  const [canView, setCanView] = useState(true);
+  const [canUpload, setCanUpload] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
+
+  // Toast state
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = (msg: string) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToastMessage(msg);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage(null);
+    }, 2200);
+  };
 
   const getFullShareUrl = (token: string) => {
     if (typeof window !== 'undefined') {
@@ -67,29 +65,65 @@ export function ShareModal({
     return `/share/${token}`;
   };
 
+  // Dialog open/close lifecycle
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    if (isOpen) {
+      previouslyFocusedRef.current = document.activeElement as HTMLElement;
+      if (!dialog.open) {
+        dialog.showModal();
+      }
+      document.body.style.overflow = 'hidden';
+    } else {
+      if (dialog.open) {
+        dialog.close();
+      }
+      document.body.style.overflow = '';
+      if (previouslyFocusedRef.current) {
+        previouslyFocusedRef.current.focus();
+      }
+    }
+
+    const handleCancel = (e: Event) => {
+      e.preventDefault();
+      onClose();
+    };
+
+    dialog.addEventListener('cancel', handleCancel);
+    return () => {
+      dialog.removeEventListener('cancel', handleCancel);
+      document.body.style.overflow = '';
+    };
+  }, [isOpen, onClose]);
+
+  // Backdrop click closes dialog
+  const handleDialogClick = (e: React.MouseEvent<HTMLDialogElement>) => {
+    if (e.target === dialogRef.current) {
+      onClose();
+    }
+  };
+
   // Fetch existing share links when modal opens
   useEffect(() => {
     if (!isOpen) return;
 
     let ignore = false;
     async function fetchLinks() {
-      setIsLoading(true);
-      setError(null);
       try {
         const res = await fetch(`/api/events/${eventId}/share-links`);
         const data = await res.json();
         if (!ignore && res.ok) {
-          const fetchedLinks = data.shareLinks || [];
+          const fetchedLinks: ShareLinkItem[] = data.shareLinks || [];
           setLinks(fetchedLinks);
-          const firstActive = fetchedLinks.find((l: ShareLinkItem) => !l.isRevoked);
+          const firstActive = fetchedLinks.find((l) => !l.isRevoked);
           if (firstActive) {
             setLatestToken(firstActive.token);
           }
         }
-      } catch (err: unknown) {
-        if (!ignore) setError((err as Error).message);
-      } finally {
-        if (!ignore) setIsLoading(false);
+      } catch (err) {
+        console.warn('Failed to load share links:', err);
       }
     }
 
@@ -99,9 +133,10 @@ export function ShareModal({
     };
   }, [isOpen, eventId]);
 
-  // Generate QR code whenever active token changes
+  // Generate QR code when active token changes
   useEffect(() => {
     if (!latestToken) {
+      setQrDataUrl(null);
       return;
     }
 
@@ -111,400 +146,382 @@ export function ShareModal({
       width: 400,
       margin: 2,
       color: {
-        dark: '#1e1b4b',
-        light: '#ffffff',
+        dark: '#3B2B26', // ink color
+        light: '#FFFFFF',
       },
     })
       .then((url) => {
         if (active) setQrDataUrl(url);
       })
-      .catch((err) => console.error('Failed to generate QR:', err));
+      .catch((err) => console.error('Failed to generate QR code:', err));
 
     return () => {
       active = false;
     };
   }, [latestToken]);
 
-  const handleCreateLink = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsCreating(true);
-    setError(null);
-
+  // Copy helper
+  const handleCopy = async (text: string, successMsg: string) => {
     try {
+      await navigator.clipboard.writeText(text);
+      showToast(successMsg);
+    } catch {
+      showToast('Couldn’t copy. Select it and copy by hand.');
+    }
+  };
+
+  // Create new passcode and link
+  const handleCreatePasscode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canView && !canUpload) {
+      showToast('Turn on viewing or uploads');
+      return;
+    }
+
+    const formattedCode = customPasscode.trim().toUpperCase();
+
+    // Check client-side collision with active links
+    if (formattedCode && links.some((l) => l.token.toUpperCase() === formattedCode && !l.isRevoked)) {
+      showToast('That passcode is taken');
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const expiresInDays = expiresOption === 'never' ? null : parseInt(expiresOption, 10);
       const res = await fetch(`/api/events/${eventId}/share-links`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           canView,
           canUpload,
-          expiresInDays: expiresInDays ? Number(expiresInDays) : null,
-          customPasscode: customPasscode.trim() || undefined,
+          expiresInDays,
+          customPasscode: formattedCode || undefined,
         }),
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to generate share link');
+      if (!res.ok) {
+        if (res.status === 409 || data.error?.includes('already taken')) {
+          showToast('That passcode is taken');
+        } else {
+          showToast(data.error || 'Failed to create passcode');
+        }
+        return;
+      }
 
       setLinks((prev) => [data.shareLink, ...prev]);
       setLatestToken(data.shareLink.token);
       setCustomPasscode('');
+      showToast('Passcode created');
     } catch (err: unknown) {
-      setError((err as Error).message);
+      showToast((err as Error).message || 'Failed to create passcode');
     } finally {
       setIsCreating(false);
     }
   };
 
-  const handleRevoke = async (linkId: string) => {
-    if (!confirm('Are you sure you want to revoke this passcode/link? Attendees using it will lose access immediately.')) {
-      return;
-    }
-
-    setRevokingId(linkId);
+  // Revoke passcode
+  const handleRevoke = async (link: ShareLinkItem) => {
     try {
-      const res = await fetch(`/api/events/${eventId}/share-links/${linkId}`, {
+      const res = await fetch(`/api/events/${eventId}/share-links/${link.id}`, {
         method: 'DELETE',
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to revoke link');
 
       setLinks((prev) =>
-        prev.map((l) => (l.id === linkId ? { ...l, isRevoked: true } : l))
+        prev.map((l) => (l.id === link.id ? { ...l, isRevoked: true } : l))
       );
-      if (latestToken && links.find((l) => l.id === linkId)?.token === latestToken) {
-        const nextActive = links.find((l) => l.id !== linkId && !l.isRevoked);
+
+      if (latestToken === link.token) {
+        const nextActive = links.find((l) => l.id !== link.id && !l.isRevoked);
         setLatestToken(nextActive ? nextActive.token : null);
-        if (!nextActive) setQrDataUrl(null);
       }
-    } catch (err: unknown) {
-      alert((err as Error).message);
-    } finally {
-      setRevokingId(null);
+
+      showToast(`Revoked ${link.token}`);
+    } catch {
+      showToast('Couldn’t revoke passcode. Try again.');
     }
   };
 
-  const handleCopyLink = () => {
-    if (!latestToken) return;
-    const url = getFullShareUrl(latestToken);
-    navigator.clipboard.writeText(url);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
-  };
-
-  const handleCopyPasscode = () => {
-    if (!latestToken) return;
-    navigator.clipboard.writeText(latestToken);
-    setCopiedPasscode(true);
-    setTimeout(() => setCopiedPasscode(false), 2000);
-  };
-
+  // Download QR image
   const handleDownloadQr = () => {
     if (!qrDataUrl) return;
+    showToast('Saving the QR image…');
     const link = document.createElement('a');
     link.download = `event-qr-${eventName.toLowerCase().replace(/\s+/g, '-')}.png`;
     link.href = qrDataUrl;
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
+  };
+
+  const activeLinks = links.filter((l) => !l.isRevoked);
+  const activeLink = links.find((l) => l.token === latestToken && !l.isRevoked) || activeLinks[0];
+  const shareUrl = latestToken ? getFullShareUrl(latestToken) : '';
+
+  const formatExpiry = (expiresAt: string | null) => {
+    if (!expiresAt) return 'Never';
+    const diffDays = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    if (diffDays <= 0) return 'Expired';
+    if (diffDays === 1) return '1 day';
+    return `${diffDays} days`;
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title="Share Event & Guest Passcode"
-      description="Guests can enter the Event Passcode directly at the sign-in page, or scan the QR code to join without creating an account."
-      maxWidth="xl"
-    >
-      <div className="space-y-6">
-        {error && (
-          <div className="rounded-xl bg-red-50 p-3 text-xs text-red-600 dark:bg-red-950/40 dark:text-red-400">
-            {error}
+    <>
+      <dialog
+        ref={dialogRef}
+        id="share"
+        className="loveall-modal"
+        aria-labelledby="st"
+        onClick={handleDialogClick}
+      >
+        <div className="dh">
+          <div>
+            <h2 id="st">Share this event</h2>
+            <p>Anyone with the passcode, link or QR code can join as a guest. No account needed.</p>
           </div>
-        )}
+          <button
+            className="x"
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
 
-        {/* Top Active QR & Link Card (if any active link exists) */}
-        {latestToken ? (
-          <div className="rounded-3xl border-2 border-purple-200/90 bg-gradient-to-br from-pink-50/70 via-purple-50/50 to-sky-50/40 p-6 dark:border-purple-900/60 dark:from-purple-950/20 dark:via-stone-900 dark:to-pink-950/20 shadow-sm space-y-4">
-            {/* Prominent Event Passcode Display */}
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-white dark:bg-stone-800 border-2 border-purple-200 dark:border-purple-800/60 shadow-xs">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-pink-400 to-purple-500 text-white shrink-0 shadow-xs">
-                  <KeyRound className="h-5 w-5" />
-                </div>
-                <div>
-                  <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 dark:text-purple-300 block">
-                    Event Passcode (Guest Code)
-                  </span>
-                  <span className="text-2xl font-mono font-black tracking-widest text-stone-900 dark:text-stone-100">
-                    {latestToken}
-                  </span>
-                </div>
-              </div>
-
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleCopyPasscode}
-                className="gap-1.5 text-xs h-9 px-4 shadow-xs"
+        <div className="db">
+          {/* Two-tab switch under header (only hosts see passcodes tab) */}
+          {isOwner && (
+            <div className="seg2" role="group" aria-label="Share sections">
+              <button
+                type="button"
+                aria-pressed={activeTab === 'share'}
+                onClick={() => setActiveTab('share')}
               >
-                {copiedPasscode ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedPasscode ? 'Copied!' : 'Copy Code'}</span>
-              </Button>
+                Share
+              </button>
+              <button
+                type="button"
+                aria-pressed={activeTab === 'passcodes'}
+                onClick={() => setActiveTab('passcodes')}
+              >
+                Passcodes <span>({activeLinks.length})</span>
+              </button>
+            </div>
+          )}
+
+          {/* SHARE TAB */}
+          <div id="s1" className="db" style={{ padding: 0, overflow: 'visible' }} hidden={activeTab !== 'share'}>
+            {/* Lilac passcode card */}
+            <div className="card code">
+              <div>
+                <small>Event passcode</small>
+                <strong id="pcode">{latestToken || 'NO CODE'}</strong>
+              </div>
+              <button
+                className="btn go"
+                type="button"
+                disabled={!latestToken}
+                onClick={() => latestToken && handleCopy(latestToken, 'Passcode copied')}
+              >
+                Copy code
+              </button>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center gap-6">
-              {/* QR Code Canvas/Image */}
-              <div className="flex flex-col items-center gap-2.5">
-                <div className="p-3 bg-white rounded-2xl shadow-sm border-2 border-purple-200 dark:border-purple-800">
+            {/* QR Row */}
+            <div className="qrrow">
+              <figure className="polaroid" style={{ margin: 0 }}>
+                <div id="qr">
                   {qrDataUrl ? (
-                    <img
-                      src={qrDataUrl}
-                      alt="Event QR Code"
-                      className="h-32 w-32 rounded-xl object-contain"
-                    />
+                    <img src={qrDataUrl} alt="QR code to join the event" />
                   ) : (
-                    <div className="h-32 w-32 flex items-center justify-center text-stone-400">
-                      <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
+                    <div style={{ padding: '40px 0', textAlign: 'center', fontSize: '0.85rem' }}>
+                      Generating QR…
                     </div>
                   )}
                 </div>
+                <figcaption>Scan to join</figcaption>
+              </figure>
 
-                <Button
-                  variant="outline"
-                  size="sm"
+              <div className="link">
+                <h3>Direct guest link</h3>
+                <p>Opening the link or scanning the code gives instant guest access.</p>
+
+                <div className="copyrow">
+                  <label className="field">
+                    <span className="sr" style={{ position: 'absolute', left: '-9999px' }}>
+                      Guest link
+                    </span>
+                    <input id="glink" readOnly value={shareUrl} />
+                  </label>
+                  <button
+                    className="btn sm mint"
+                    type="button"
+                    disabled={!shareUrl}
+                    onClick={() => shareUrl && handleCopy(shareUrl, 'Link copied')}
+                  >
+                    Copy link
+                  </button>
+                </div>
+
+                <div className="perms">
+                  {activeLink?.canView && <span className="pill">Guests can view</span>}
+                  {activeLink?.canUpload && <span className="pill">Guests can upload</span>}
+                </div>
+
+                <button
+                  className="btn sm"
+                  type="button"
+                  id="saveqr"
+                  style={{ justifySelf: 'start' }}
                   onClick={handleDownloadQr}
-                  className="gap-1.5 text-xs h-8 px-3 border-stone-200 dark:border-stone-700 cursor-pointer rounded-full"
+                  disabled={!qrDataUrl}
                 >
-                  <Download className="w-3.5 h-3.5 text-purple-500" />
-                  <span>Save QR Image</span>
-                </Button>
+                  Save QR image
+                </button>
               </div>
+            </div>
+          </div>
 
-              {/* Link Details and Copy Button */}
-              <div className="flex-1 w-full space-y-3 text-left">
-                <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
-                    Direct Guest Link
-                  </span>
-                  <p className="text-xs text-stone-600 dark:text-stone-400 mt-0.5 leading-relaxed">
-                    Opening this link or scanning the QR code grants instant guest access without requiring an account.
-                  </p>
+          {/* PASSCODES TAB (Host only) */}
+          {isOwner && (
+            <div id="s2" className="db" style={{ padding: 0, overflow: 'visible' }} hidden={activeTab !== 'passcodes'}>
+              <form className="card" id="newcode" onSubmit={handleCreatePasscode} style={{ display: 'grid', gap: '14px' }}>
+                <h3 style={{ fontSize: '1.35rem', margin: 0 }}>Create a passcode and link</h3>
+
+                <div className="opts" style={{ gridTemplateColumns: '1fr' }}>
+                  <label className="field">
+                    Custom passcode (optional)
+                    <input
+                      id="custom"
+                      maxLength={10}
+                      placeholder="Leave blank to make one"
+                      autoCapitalize="characters"
+                      autoComplete="off"
+                      value={customPasscode}
+                      onChange={(e) => setCustomPasscode(e.target.value.toUpperCase())}
+                      style={{ textTransform: 'uppercase' }}
+                    />
+                  </label>
+
+                  <label className="field">
+                    Link expires
+                    <select
+                      id="exp"
+                      value={expiresOption}
+                      onChange={(e) => setExpiresOption(e.target.value)}
+                    >
+                      <option value="7">7 days</option>
+                      <option value="1">1 day</option>
+                      <option value="30">30 days</option>
+                      <option value="never">Never</option>
+                    </select>
+                  </label>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={getFullShareUrl(latestToken)}
-                    className="flex-1 rounded-2xl border-2 border-stone-200 bg-white px-3.5 py-2 text-xs font-mono text-stone-800 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 focus:outline-none select-all"
-                  />
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleCopyLink}
-                    className="gap-1.5 shrink-0 cursor-pointer h-9 px-3.5"
-                  >
-                    {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedLink ? 'Copied!' : 'Copy Link'}</span>
-                  </Button>
+                <div className="opts">
+                  <label className="opt">
+                    <input
+                      type="checkbox"
+                      id="pv"
+                      checked={canView}
+                      onChange={(e) => setCanView(e.target.checked)}
+                    />
+                    <span>
+                      <b>Allow viewing</b>
+                      <small>Guests can browse the gallery</small>
+                    </span>
+                  </label>
+
+                  <label className="opt">
+                    <input
+                      type="checkbox"
+                      id="pu"
+                      checked={canUpload}
+                      onChange={(e) => setCanUpload(e.target.checked)}
+                    />
+                    <span>
+                      <b>Allow uploads</b>
+                      <small>Guests can add photos</small>
+                    </span>
+                  </label>
                 </div>
 
-                <div className="flex items-center gap-2 text-[11px] text-stone-500 font-semibold">
-                  <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
-                    <Eye className="w-3.5 h-3.5" /> Guest View Enabled
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1 text-purple-700 dark:text-purple-400">
-                    <UploadCloud className="w-3.5 h-3.5" /> Guest Uploads Enabled
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          !isLoading && (
-            <div className="rounded-3xl border-2 border-dashed border-purple-200 p-8 text-center dark:border-purple-800 bg-purple-50/30">
-              <QrIcon className="w-9 h-9 mx-auto text-purple-400 mb-2" />
-              <p className="text-xs font-bold text-stone-700 dark:text-stone-300">
-                No active passcode or share link yet
-              </p>
-              <p className="text-[11px] text-stone-500 mt-0.5">
-                Generate a passcode below so guests can view the gallery directly!
-              </p>
-            </div>
-          )
-        )}
+                <button
+                  className="btn go"
+                  type="submit"
+                  disabled={isCreating}
+                  style={{ width: '100%' }}
+                >
+                  {isCreating ? 'Creating…' : 'Create passcode and link'}
+                </button>
+              </form>
 
-        {/* Create New Link Section */}
-        <form
-          onSubmit={handleCreateLink}
-          className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 dark:border-zinc-800 dark:bg-zinc-900/60 space-y-4"
-        >
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider">
-              Create Passcode & Share Link
-            </h4>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Custom Passcode Input */}
-            <div>
-              <label className="text-[10px] font-medium text-zinc-500 mb-1 block">
-                Custom Passcode (Optional)
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. NEP26 (blank for auto-code)"
-                value={customPasscode}
-                onChange={(e) => setCustomPasscode(e.target.value.toUpperCase())}
-                className="h-8 w-full rounded-lg border border-zinc-300 bg-white px-2.5 text-xs font-mono uppercase text-zinc-800 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
-              />
-            </div>
-
-            {/* Expiration Dropdown */}
-            <div>
-              <label className="text-[10px] font-medium text-zinc-500 mb-1 block">Link Expiry</label>
-              <select
-                value={expiresInDays === null ? 'never' : String(expiresInDays)}
-                onChange={(e) =>
-                  setExpiresInDays(e.target.value === 'never' ? null : Number(e.target.value))
-                }
-                className="h-8 w-full rounded-lg border border-zinc-300 bg-white px-2 text-xs text-zinc-800 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
-              >
-                <option value="1">24 Hours</option>
-                <option value="7">7 Days</option>
-                <option value="30">30 Days</option>
-                <option value="never">Never Expires</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* View Capability */}
-            <label className="flex items-center gap-2.5 p-2.5 rounded-lg border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={canView}
-                onChange={(e) => setCanView(e.target.checked)}
-                className="h-4 w-4 rounded-sm text-indigo-600 focus:ring-indigo-500"
-              />
-              <div className="text-xs">
-                <span className="font-medium text-zinc-900 dark:text-zinc-100 block">Allow Viewing</span>
-                <span className="text-[10px] text-zinc-500">Guests can browse gallery</span>
-              </div>
-            </label>
-
-            {/* Upload Capability */}
-            <label className="flex items-center gap-2.5 p-2.5 rounded-lg border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={canUpload}
-                onChange={(e) => setCanUpload(e.target.checked)}
-                className="h-4 w-4 rounded-sm text-indigo-600 focus:ring-indigo-500"
-              />
-              <div className="text-xs">
-                <span className="font-medium text-zinc-900 dark:text-zinc-100 block">Allow Uploads</span>
-                <span className="text-[10px] text-zinc-500">Guests can add photos</span>
-              </div>
-            </label>
-          </div>
-
-          <div className="flex justify-end pt-1">
-            <Button
-              type="submit"
-              size="sm"
-              variant="primary"
-              isLoading={isCreating}
-              className="gap-1.5 cursor-pointer"
-            >
-              <Share2 className="w-3.5 h-3.5" />
-              <span>Create Passcode & Link</span>
-            </Button>
-          </div>
-        </form>
-
-        {/* Existing Links List & Revocation */}
-        <div className="space-y-3">
-          <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-            All Event Passcodes ({links.length})
-          </h4>
-
-          {isLoading ? (
-            <div className="flex items-center justify-center py-6">
-              <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
-            </div>
-          ) : links.length === 0 ? (
-            <p className="text-xs text-zinc-400 py-2">No passcodes created yet.</p>
-          ) : (
-            <div className="divide-y divide-zinc-100 dark:divide-zinc-800 max-h-48 overflow-y-auto">
-              {links.map((link) => {
-                const isExpired = link.expiresAt && new Date() > new Date(link.expiresAt);
-                const isActive = !link.isRevoked && !isExpired;
-
-                return (
-                  <div
-                    key={link.id}
-                    className="flex items-center justify-between py-2.5 px-2 hover:bg-zinc-50/60 dark:hover:bg-zinc-800/40 rounded-lg transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => {
-                          if (isActive) setLatestToken(link.token);
-                        }}
-                        className="text-xs font-mono font-bold text-zinc-800 dark:text-zinc-200 hover:text-indigo-600 truncate max-w-[140px] sm:max-w-xs cursor-pointer text-left"
-                        title="Click to activate and view QR code"
-                      >
-                        {link.token}
-                      </button>
-
-                      {link.isRevoked ? (
-                        <Badge variant="danger">Revoked</Badge>
-                      ) : isExpired ? (
-                        <Badge variant="default">Expired</Badge>
-                      ) : (
-                        <Badge variant="success">
-                          {link.canUpload ? 'View & Upload' : 'View Only'}
-                        </Badge>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {isActive && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              navigator.clipboard.writeText(getFullShareUrl(link.token));
-                              setCopiedLink(true);
-                              setTimeout(() => setCopiedLink(false), 2000);
-                            }}
-                            className="h-7 px-2 text-xs"
-                            title="Copy link"
+              <h3 className="sec">All event passcodes</h3>
+              <ul className="rows" id="codes">
+                {activeLinks.length > 0 ? (
+                  activeLinks.map((k, i) => (
+                    <li key={k.id} className="row">
+                      <div className="face" style={{ ['--c' as any]: 'var(--lilac)' }} aria-hidden="true">
+                        #
+                      </div>
+                      <div>
+                        <div className="nm">
+                          {k.token}
+                          {i === 0 && <span className="tag y">Main</span>}
+                        </div>
+                        <div className="em">
+                          Expires: {formatExpiry(k.expiresAt)} ·{' '}
+                          {k.canView && k.canUpload
+                            ? 'View and upload'
+                            : k.canView
+                            ? 'View only'
+                            : k.canUpload
+                            ? 'Upload only'
+                            : 'No permissions'}
+                        </div>
+                      </div>
+                      <div className="acts2">
+                        <button
+                          className="btn sm mint"
+                          type="button"
+                          onClick={() => handleCopy(k.token, 'Passcode copied')}
+                        >
+                          Copy
+                        </button>
+                        {i !== 0 && (
+                          <button
+                            className="btn sm"
+                            type="button"
+                            onClick={() => handleRevoke(k)}
                           >
-                            <Copy className="w-3.5 h-3.5" />
-                          </Button>
-
-                          <Button
-                            variant="danger"
-                            size="sm"
-                            isLoading={revokingId === link.id}
-                            onClick={() => handleRevoke(link.id)}
-                            className="h-7 px-2 text-xs gap-1"
-                            title="Revoke passcode immediately"
-                          >
-                            <Ban className="w-3 h-3" />
                             Revoke
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  ))
+                ) : (
+                  <li className="empty">No passcodes yet.</li>
+                )}
+              </ul>
             </div>
           )}
         </div>
+      </dialog>
+
+      {/* Confirmation Toast */}
+      <div
+        className={`loveall-toast${toastMessage ? ' on' : ''}`}
+        role="status"
+        aria-live="polite"
+      >
+        {toastMessage}
       </div>
-    </Modal>
+    </>
   );
 }

@@ -14,6 +14,11 @@ const removeMemberSchema = z.object({
   userId: z.string().min(1),
 });
 
+const updateMemberRoleSchema = z.object({
+  userId: z.string().min(1),
+  role: z.enum(['OWNER', 'MEMBER']),
+});
+
 /**
  * GET /api/events/[eventId]/members
  * List all members of an event
@@ -211,6 +216,85 @@ export async function DELETE(
     console.error('[API members DELETE error]:', error);
     return NextResponse.json(
       { error: (error as Error).message || 'Failed to remove member' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * PATCH /api/events/[eventId]/members
+ * Update a member's role (OWNER only)
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ eventId: string }> }
+) {
+  try {
+    const { eventId } = await params;
+    const session = await getAuthSession();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const roleCheck = await requireEventRole(eventId, session.user.id, [EventRole.OWNER]);
+    if (!roleCheck.allowed) {
+      return NextResponse.json(
+        { error: roleCheck.error || 'Only the event owner can change member roles' },
+        { status: roleCheck.statusCode || 403 }
+      );
+    }
+
+    const body = await req.json();
+    const parsed = updateMemberRoleSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid update payload' }, { status: 400 });
+    }
+
+    const { userId: targetUserId, role: newRole } = parsed.data;
+
+    // Prevent downgrading the sole owner of an event
+    if (targetUserId === session.user.id && newRole !== EventRole.OWNER) {
+      const ownerCount = await prisma.eventMember.count({
+        where: { eventId, role: EventRole.OWNER },
+      });
+      if (ownerCount <= 1) {
+        return NextResponse.json(
+          { error: 'Cannot change the role of the sole owner' },
+          { status: 400 }
+        );
+      }
+    }
+
+    const updated = await prisma.eventMember.update({
+      where: {
+        eventId_userId: {
+          eventId,
+          userId: targetUserId,
+        },
+      },
+      data: {
+        role: newRole,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      member: updated,
+    });
+  } catch (error: unknown) {
+    console.error('[API members PATCH error]:', error);
+    return NextResponse.json(
+      { error: (error as Error).message || 'Failed to update member role' },
       { status: 500 }
     );
   }

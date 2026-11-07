@@ -39,7 +39,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const roleCheck = await requireEventRole(eventId, session.user.id, [EventRole.OWNER]);
+    const roleCheck = await requireEventRole(eventId, session.user.id, [EventRole.OWNER, EventRole.MEMBER]);
     if (!roleCheck.allowed) {
       return NextResponse.json(
         { error: roleCheck.error || 'Only the event owner can manage share links' },

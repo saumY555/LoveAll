@@ -414,14 +414,13 @@ export default function EventDetailPage({
         />
       )}
 
-      {isOwner && (
-        <ShareModal
-          isOpen={isShareModalOpen}
-          onClose={() => setIsShareModalOpen(false)}
-          eventId={event.id}
-          eventName={event.name}
-        />
-      )}
+      <ShareModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        eventId={event.id}
+        eventName={event.name}
+        isOwner={isOwner}
+      />
 
       <PrivacyConsentModal
         isOpen={isPrivacyModalOpen}
