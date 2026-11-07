@@ -1,11 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Modal } from '@/components/ui/Modal';
-import { Input } from '@/components/ui/Input';
-import { Button } from '@/components/ui/Button';
-
 import { EventWithRole } from '@/types';
 
 interface CreateEventModalProps {
@@ -16,33 +12,131 @@ interface CreateEventModalProps {
 
 export function CreateEventModal({ isOpen, onClose, onEventCreated }: CreateEventModalProps) {
   const router = useRouter();
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  // Form inputs
   const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
   const [eventDate, setEventDate] = useState('');
   const [coverImage, setCoverImage] = useState('');
+  const [description, setDescription] = useState('');
   const [isPrivate, setIsPrivate] = useState(true);
   const [allowGuestView, setAllowGuestView] = useState(false);
   const [allowGuestUpload, setAllowGuestUpload] = useState(false);
 
+  // Validation & UI State
+  const [isNameBad, setIsNameBad] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = (msg: string) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToastMessage(msg);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage(null);
+    }, 2800);
+  };
+
+  // Open / Close native dialog & trap focus
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    if (isOpen) {
+      previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+      if (!dialog.open) {
+        dialog.showModal();
+      }
+      document.body.style.overflow = 'hidden';
+      setIsNameBad(false);
+      setToastMessage(null);
+
+      // Focus on Event name field when opened
+      const timer = setTimeout(() => {
+        nameInputRef.current?.focus();
+      }, 50);
+
+      return () => clearTimeout(timer);
+    } else {
+      if (dialog.open) {
+        dialog.close();
+      }
+      document.body.style.overflow = '';
+      if (previouslyFocusedRef.current) {
+        previouslyFocusedRef.current.focus();
+      }
+    }
+
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
+  // Handle native cancel (Esc key)
+  const handleCancel = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    onClose();
+  };
+
+  // Close on backdrop click
+  const handleDialogClick = (e: React.MouseEvent<HTMLDialogElement>) => {
+    if (e.target === dialogRef.current) {
+      onClose();
+    }
+  };
+
+  // Option A sync: Ticking guest uploads auto-checks guest viewing; unticking viewing auto-unticks uploads
+  const handleGuestUploadChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = e.target.checked;
+    setAllowGuestUpload(checked);
+    if (checked) {
+      setAllowGuestView(true);
+    }
+  };
+
+  const handleGuestViewChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = e.target.checked;
+    setAllowGuestView(checked);
+    if (!checked) {
+      setAllowGuestUpload(false);
+    }
+  };
+
+  // Summary line text based on guest viewing and upload flags
+  const getSummaryText = () => {
+    if (!allowGuestView && !allowGuestUpload) {
+      return 'Guests can’t see or add photos. Only members can.';
+    }
+    if (allowGuestView && !allowGuestUpload) {
+      return 'Guests can browse photos but can’t add any.';
+    }
+    if (allowGuestView && allowGuestUpload) {
+      return 'Guests can browse and add photos.';
+    }
+    return 'Guests can add photos but can’t browse the gallery.';
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      setError('Event name is required');
+    if (isLoading) return;
+
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setIsNameBad(true);
+      nameInputRef.current?.focus();
       return;
     }
 
     setIsLoading(true);
-    setError(null);
 
     try {
       const res = await fetch('/api/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: name.trim(),
+          name: trimmedName,
           description: description.trim() || undefined,
           eventDate: eventDate || undefined,
           coverImage: coverImage.trim() || undefined,
@@ -58,11 +152,16 @@ export function CreateEventModal({ isOpen, onClose, onEventCreated }: CreateEven
       }
 
       onClose();
-      // Reset state
+
+      // Reset form
       setName('');
-      setDescription('');
       setEventDate('');
       setCoverImage('');
+      setDescription('');
+      setIsPrivate(true);
+      setAllowGuestView(false);
+      setAllowGuestUpload(false);
+      setIsNameBad(false);
 
       if (onEventCreated) {
         onEventCreated(data.event);
@@ -70,119 +169,186 @@ export function CreateEventModal({ isOpen, onClose, onEventCreated }: CreateEven
         router.push(`/events/${data.event.id}`);
       }
     } catch (err: unknown) {
-      setError((err as Error).message);
+      console.error('Failed to create event:', err);
+      showToast('Couldn’t create the event. Try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title="Create New Event"
-      description="Set up a shared gallery for your friends, trip, or gathering."
-    >
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {error && (
-          <div className="rounded-lg bg-red-50 p-3 text-xs text-red-600 dark:bg-red-950/40 dark:text-red-400">
-            {error}
+    <>
+      <dialog
+        ref={dialogRef}
+        id="ne"
+        className="loveall-modal"
+        aria-labelledby="nt"
+        onCancel={handleCancel}
+        onClick={handleDialogClick}
+      >
+        <div className="dh">
+          <div>
+            <h2 id="nt">New event</h2>
+            <p>Set up a shared gallery for your friends, trip or gathering.</p>
           </div>
-        )}
-
-        <Input
-          label="Event Name *"
-          placeholder="e.g. Summer Road Trip 2026, Tech Gala"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input
-            label="Event Date"
-            type="date"
-            value={eventDate}
-            onChange={(e) => setEventDate(e.target.value)}
-          />
-
-          <Input
-            label="Cover Image URL (optional)"
-            type="url"
-            placeholder="https://example.com/cover.jpg"
-            value={coverImage}
-            onChange={(e) => setCoverImage(e.target.value)}
-          />
+          <button
+            className="x"
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+          >
+            ✕
+          </button>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-stone-700 dark:text-stone-300">
-            Description (optional)
-          </label>
-          <textarea
-            rows={3}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="What memories will we make here?"
-            className="w-full rounded-2xl border-2 border-stone-200 bg-white/90 p-3.5 text-sm text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-200/60 dark:border-stone-750 dark:bg-stone-900/90 dark:text-stone-100 transition-all duration-150 shadow-2xs"
-          />
-        </div>
+        <form className="ce" id="f" noValidate onSubmit={handleSubmit}>
+          <div className="db">
+            {/* Event Name */}
+            <label className={`field${isNameBad ? ' bad' : ''}`} id="fn">
+              Event name <span className="opt-t">(required)</span>
+              <input
+                ref={nameInputRef}
+                id="name"
+                maxLength={80}
+                placeholder="Summer road trip 2026"
+                autoComplete="off"
+                aria-describedby="nerr"
+                required
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (isNameBad) setIsNameBad(false);
+                }}
+              />
+              <span className="err" id="nerr">
+                Give your event a name.
+              </span>
+            </label>
 
-        {/* Permissions & Sharing toggles */}
-        <div className="rounded-3xl border-2 border-purple-200/90 bg-purple-50/50 p-4.5 dark:border-purple-900/60 dark:bg-purple-950/30 space-y-3.5">
-          <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-purple-700 dark:text-purple-300">
-            Access & Sharing Permissions ✨
-          </h4>
+            {/* Event Date & Cover Image */}
+            <div className="two">
+              <label className="field">
+                Event date <span className="opt-t">(optional)</span>
+                <input
+                  id="date"
+                  type="date"
+                  value={eventDate}
+                  onChange={(e) => setEventDate(e.target.value)}
+                />
+              </label>
 
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={isPrivate}
-              onChange={(e) => setIsPrivate(e.target.checked)}
-              className="h-4.5 w-4.5 rounded-md border-purple-300 text-purple-600 focus:ring-purple-400 accent-purple-600 cursor-pointer"
-            />
-            <div className="text-xs">
-              <span className="font-bold text-stone-900 dark:text-stone-100">Private Event</span>
-              <p className="text-stone-500 font-medium">Only invited members or guests with a valid passcode/link can view</p>
+              <label className="field">
+                Cover image link <span className="opt-t">(optional)</span>
+                <input
+                  id="cover"
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://example.com/cover.jpg"
+                  autoComplete="off"
+                  value={coverImage}
+                  onChange={(e) => setCoverImage(e.target.value)}
+                />
+                <span className="hint">
+                  You can pick a cover from the event’s photos later.
+                </span>
+              </label>
             </div>
-          </label>
 
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={allowGuestView}
-              onChange={(e) => setAllowGuestView(e.target.checked)}
-              className="h-4.5 w-4.5 rounded-md border-purple-300 text-purple-600 focus:ring-purple-400 accent-purple-600 cursor-pointer"
-            />
-            <div className="text-xs">
-              <span className="font-bold text-stone-900 dark:text-stone-100">Allow Guest Viewing</span>
-              <p className="text-stone-500 font-medium">Anyone with a share link or passcode can view photos without an account</p>
-            </div>
-          </label>
+            {/* Description */}
+            <label className="field">
+              Description <span className="opt-t">(optional)</span>
+              <textarea
+                id="desc"
+                placeholder="What memories will we make here?"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </label>
 
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={allowGuestUpload}
-              onChange={(e) => setAllowGuestUpload(e.target.checked)}
-              className="h-4.5 w-4.5 rounded-md border-purple-300 text-purple-600 focus:ring-purple-400 accent-purple-600 cursor-pointer"
-            />
-            <div className="text-xs">
-              <span className="font-bold text-stone-900 dark:text-stone-100">Allow Guest Uploads</span>
-              <p className="text-stone-500 font-medium">Guests with a share link can upload photos directly into the gallery</p>
-            </div>
-          </label>
+            {/* Who can get in card */}
+            <fieldset className="card acc" style={{ border: '2px solid var(--line)', margin: 0 }}>
+              <legend style={{ position: 'absolute', left: '-9999px' }}>
+                Who can get in
+              </legend>
+              <h3>Who can get in</h3>
+              <div className="opts" style={{ gridTemplateColumns: '1fr' }}>
+                <label className="opt">
+                  <input
+                    type="checkbox"
+                    id="priv"
+                    checked={isPrivate}
+                    onChange={(e) => setIsPrivate(e.target.checked)}
+                  />
+                  <span>
+                    <b>Private event</b>
+                    <small>Only invited members, or guests with a valid passcode or link, can see it</small>
+                  </span>
+                </label>
+
+                <label className="opt">
+                  <input
+                    type="checkbox"
+                    id="gv"
+                    checked={allowGuestView}
+                    onChange={handleGuestViewChange}
+                  />
+                  <span>
+                    <b>Allow guest viewing</b>
+                    <small>Anyone with your link or passcode can browse photos, no account needed</small>
+                  </span>
+                </label>
+
+                <label className="opt">
+                  <input
+                    type="checkbox"
+                    id="gu"
+                    checked={allowGuestUpload}
+                    onChange={handleGuestUploadChange}
+                  />
+                  <span>
+                    <b>Allow guest uploads</b>
+                    <small>Guests with your link can add photos to the gallery</small>
+                  </span>
+                </label>
+              </div>
+
+              <p className="sum" id="sum" aria-live="polite">
+                {getSummaryText()}
+              </p>
+            </fieldset>
+          </div>
+
+          {/* Dialog Footer */}
+          <div className="df">
+            <button
+              className="btn white"
+              type="button"
+              onClick={onClose}
+              disabled={isLoading}
+            >
+              Cancel
+            </button>
+            <button
+              className="btn go"
+              type="submit"
+              disabled={isLoading}
+            >
+              {isLoading ? 'Creating…' : 'Create event'}
+            </button>
+          </div>
+        </form>
+      </dialog>
+
+      {/* Failure Toast notification inside or above dialog */}
+      {toastMessage && (
+        <div
+          className="toast on"
+          role="status"
+          aria-live="polite"
+        >
+          {toastMessage}
         </div>
-
-        <div className="flex justify-end gap-3 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose} disabled={isLoading} className="rounded-full">
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" isLoading={isLoading} className="px-6 shadow-sm">
-            Create Event 🎉
-          </Button>
-        </div>
-      </form>
-    </Modal>
+      )}
+    </>
   );
 }

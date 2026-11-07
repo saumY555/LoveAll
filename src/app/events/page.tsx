@@ -464,6 +464,7 @@ export default function EventsPage() {
         onClose={() => setIsCreateModalOpen(false)}
         onEventCreated={(newEvent) => {
           setIsCreateModalOpen(false);
+          showToast(`Event created: ${newEvent.name}`);
           router.push(`/events/${newEvent.id}`);
         }}
       />
