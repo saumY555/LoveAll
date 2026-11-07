@@ -11,8 +11,11 @@ import {
   FileImage,
   RefreshCw,
   Trash2,
+  Zap,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { formatBytes } from '@/lib/utils';
+import { compressImageClientSide } from '@/lib/clientImageCompression';
 
 export interface FileUploadItem {
   id: string;
@@ -138,8 +141,13 @@ export function UploadDropzoneModal({
   const [items, setItems] = useState<FileUploadItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [qualityMode, setQualityMode] = useState<'original' | 'compressed'>('original');
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  const completedRef = useRef(0);
+  const errorRef = useRef(0);
+  const totalRef = useRef(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
@@ -225,146 +233,165 @@ export function UploadDropzoneModal({
     });
   }, []);
 
-  const notifyProgress = useCallback(
-    (currentItems: FileUploadItem[], uploading: boolean) => {
-      if (!onUploadProgress) return;
-      const done = currentItems.filter((i) => i.status === 'done').length;
-      const err = currentItems.filter((i) => i.status === 'error').length;
-      const total = currentItems.length;
-      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-      onUploadProgress({
-        isUploading: uploading,
-        totalCount: total,
-        completedCount: done,
-        errorCount: err,
-        progressPercent: pct,
-      });
-    },
-    [onUploadProgress]
-  );
+  const reportProgressLive = useCallback(() => {
+    if (!onUploadProgress) return;
+    const total = totalRef.current;
+    const completed = completedRef.current;
+    const errors = errorRef.current;
+    const isFinished = total > 0 && completed + errors >= total;
+    const pct = total > 0 ? Math.min(100, Math.round(((completed + errors) / total) * 100)) : 0;
+    onUploadProgress({
+      isUploading: !isFinished,
+      totalCount: total,
+      completedCount: completed,
+      errorCount: errors,
+      progressPercent: isFinished ? 100 : pct,
+    });
+  }, [onUploadProgress]);
 
-  // Upload an individual item with throttled XHR progress updates
-  const uploadSingleItem = useCallback((item: FileUploadItem): Promise<boolean> => {
-    return new Promise((resolve) => {
+  // Upload an individual item with throttled XHR progress updates and client-side compression
+  const uploadSingleItem = useCallback(
+    async (item: FileUploadItem): Promise<boolean> => {
       setItems((prev) =>
         prev.map((i) =>
           i.id === item.id ? { ...i, status: 'uploading', progress: 10 } : i
         )
       );
 
-      const formData = new FormData();
-      formData.append('files', item.file);
+      let fileToUpload = item.file;
+      if (qualityMode === 'compressed') {
+        try {
+          setItems((prev) =>
+            prev.map((i) =>
+              i.id === item.id ? { ...i, status: 'processing', progress: 15 } : i
+            )
+          );
+          fileToUpload = await compressImageClientSide(item.file);
+        } catch (err) {
+          console.warn('Compression fallback to original:', err);
+        }
+      }
 
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `/api/events/${eventId}/photos/upload`);
+      return new Promise((resolve) => {
+        const formData = new FormData();
+        formData.append('files', fileToUpload);
 
-      let lastReportedProgress = 10;
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          const percent = Math.min(89, Math.round((e.loaded / e.total) * 90));
-          // Throttle state dispatches: update only on meaningful progress jumps (>= 4%)
-          if (percent - lastReportedProgress >= 4 || percent >= 88) {
-            lastReportedProgress = percent;
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `/api/events/${eventId}/photos/upload`);
+
+        let lastReportedProgress = 15;
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const percent = Math.min(89, Math.round((e.loaded / e.total) * 90));
+            // Throttle state dispatches: update only on meaningful progress jumps (>= 5%)
+            if (percent - lastReportedProgress >= 5 || percent >= 88) {
+              lastReportedProgress = percent;
+              setItems((prev) =>
+                prev.map((i) =>
+                  i.id === item.id
+                    ? {
+                        ...i,
+                        progress: percent,
+                        status: percent >= 88 ? 'processing' : 'uploading',
+                      }
+                    : i
+                )
+              );
+            }
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              if (data.errors && data.errors.length > 0) {
+                const errReason = data.errors[0].reason || 'Upload failed';
+                setItems((prev) =>
+                  prev.map((i) =>
+                    i.id === item.id
+                      ? { ...i, status: 'error' as const, error: errReason }
+                      : i
+                  )
+                );
+                errorRef.current += 1;
+                reportProgressLive();
+                resolve(false);
+                return;
+              }
+
+              setItems((prev) =>
+                prev.map((i) =>
+                  i.id === item.id ? { ...i, status: 'done' as const, progress: 100 } : i
+                )
+              );
+              completedRef.current += 1;
+              reportProgressLive();
+              onPhotoUploaded?.();
+              resolve(true);
+            } catch {
+              setItems((prev) =>
+                prev.map((i) =>
+                  i.id === item.id
+                    ? { ...i, status: 'error' as const, error: 'Invalid response from server' }
+                    : i
+                )
+              );
+              errorRef.current += 1;
+              reportProgressLive();
+              resolve(false);
+            }
+          } else {
+            let errorMsg = 'Upload failed';
+            try {
+              const data = JSON.parse(xhr.responseText);
+              if (data.error) errorMsg = data.error;
+            } catch {
+              // fallback
+            }
             setItems((prev) =>
               prev.map((i) =>
-                i.id === item.id
-                  ? {
-                      ...i,
-                      progress: percent,
-                      status: percent >= 88 ? 'processing' : 'uploading',
-                    }
-                  : i
+                i.id === item.id ? { ...i, status: 'error' as const, error: errorMsg } : i
               )
             );
-          }
-        }
-      };
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const data = JSON.parse(xhr.responseText);
-            if (data.errors && data.errors.length > 0) {
-              const errReason = data.errors[0].reason || 'Upload failed';
-              setItems((prev) => {
-                const next = prev.map((i) =>
-                  i.id === item.id
-                    ? { ...i, status: 'error' as const, error: errReason }
-                    : i
-                );
-                notifyProgress(next, true);
-                return next;
-              });
-              resolve(false);
-              return;
-            }
-
-            setItems((prev) => {
-              const next = prev.map((i) =>
-                i.id === item.id ? { ...i, status: 'done' as const, progress: 100 } : i
-              );
-              notifyProgress(next, true);
-              return next;
-            });
-            onPhotoUploaded?.();
-            resolve(true);
-          } catch {
-            setItems((prev) => {
-              const next = prev.map((i) =>
-                i.id === item.id
-                  ? { ...i, status: 'error' as const, error: 'Invalid response from server' }
-                  : i
-              );
-              notifyProgress(next, true);
-              return next;
-            });
+            errorRef.current += 1;
+            reportProgressLive();
             resolve(false);
           }
-        } else {
-          let errorMsg = 'Upload failed';
-          try {
-            const data = JSON.parse(xhr.responseText);
-            if (data.error) errorMsg = data.error;
-          } catch {
-            // fallback
-          }
-          setItems((prev) => {
-            const next = prev.map((i) =>
-              i.id === item.id ? { ...i, status: 'error' as const, error: errorMsg } : i
-            );
-            notifyProgress(next, true);
-            return next;
-          });
-          resolve(false);
-        }
-      };
+        };
 
-      xhr.onerror = () => {
-        setItems((prev) => {
-          const next = prev.map((i) =>
-            i.id === item.id
-              ? { ...i, status: 'error' as const, error: 'Network error during upload' }
-              : i
+        xhr.onerror = () => {
+          setItems((prev) =>
+            prev.map((i) =>
+              i.id === item.id
+                ? { ...i, status: 'error' as const, error: 'Network error during upload' }
+                : i
+            )
           );
-          notifyProgress(next, true);
-          return next;
-        });
-        resolve(false);
-      };
+          errorRef.current += 1;
+          reportProgressLive();
+          resolve(false);
+        };
 
-      xhr.send(formData);
-    });
-  }, [eventId, notifyProgress, onPhotoUploaded]);
+        xhr.send(formData);
+      });
+    },
+    [eventId, qualityMode, onPhotoUploaded, reportProgressLive]
+  );
 
   const handleStartUpload = async () => {
     const queuedItems = items.filter((i) => i.status === 'queued' || i.status === 'error');
     if (queuedItems.length === 0) return;
 
-    setIsUploading(true);
-    notifyProgress(items, true);
+    totalRef.current = items.length;
+    completedRef.current = items.filter((i) => i.status === 'done').length;
+    errorRef.current = 0;
 
-    // Upload files in a parallel pool of 3 concurrent uploads for high throughput
-    const CONCURRENCY = 3;
+    setIsUploading(true);
+    reportProgressLive();
+
+    // In compressed mode, payloads are 80-90% smaller so concurrency can safely be 4 for high speed
+    const CONCURRENCY = qualityMode === 'compressed' ? 4 : 3;
     let nextIndex = 0;
 
     const worker = async () => {
@@ -385,10 +412,8 @@ export function UploadDropzoneModal({
     await Promise.all(workers);
 
     setIsUploading(false);
-    setItems((finalItems) => {
-      notifyProgress(finalItems, false);
-      return finalItems;
-    });
+    reportProgressLive();
+
     if (onUploadComplete) {
       onUploadComplete();
     }
@@ -437,6 +462,136 @@ export function UploadDropzoneModal({
           className="hidden"
           tabIndex={-1}
         />
+
+        {/* Upload Quality Selector (Original vs Compressed WhatsApp-style) */}
+        <div
+          style={{
+            background: '#FFF8F0',
+            border: '2px solid var(--ink, #3B2B26)',
+            borderRadius: '20px',
+            boxShadow: '3px 3px 0 var(--ink, #3B2B26)',
+            padding: '12px 14px',
+          }}
+        >
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span
+              style={{
+                fontSize: '0.85rem',
+                fontWeight: 800,
+                color: 'var(--ink, #3B2B26)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <span>Upload quality</span>
+            </span>
+
+            <span
+              style={{
+                fontSize: '0.74rem',
+                fontWeight: 800,
+                color: qualityMode === 'compressed' ? '#007A50' : '#7A5C54',
+                background: qualityMode === 'compressed' ? 'var(--mint, #6FD9B0)' : '#EFEAE4',
+                padding: '2px 8px',
+                borderRadius: '999px',
+                border: '1.5px solid var(--ink, #3B2B26)',
+              }}
+            >
+              {qualityMode === 'compressed' ? '⚡ 5x-10x Faster' : 'Original Quality'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {/* Option 1: Original */}
+            <button
+              type="button"
+              disabled={isUploading}
+              onClick={() => setQualityMode('original')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '8px 12px',
+                borderRadius: '14px',
+                border: '2px solid var(--ink, #3B2B26)',
+                background: qualityMode === 'original' ? 'var(--lilac, #C5B4FF)' : '#FFFFFF',
+                boxShadow: qualityMode === 'original' ? '2px 2px 0 var(--ink, #3B2B26)' : 'none',
+                cursor: isUploading ? 'not-allowed' : 'pointer',
+                textAlign: 'left',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <div
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  background: '#FFFFFF',
+                  border: '1.5px solid var(--ink, #3B2B26)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <ImageIcon className="w-3.5 h-3.5 text-stone-700" />
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--ink, #3B2B26)' }}>
+                  Original (Default)
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#55423C', lineHeight: 1.2 }}>
+                  Full camera resolution
+                </div>
+              </div>
+            </button>
+
+            {/* Option 2: Compressed (WhatsApp style) */}
+            <button
+              type="button"
+              disabled={isUploading}
+              onClick={() => setQualityMode('compressed')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '8px 12px',
+                borderRadius: '14px',
+                border: '2px solid var(--ink, #3B2B26)',
+                background: qualityMode === 'compressed' ? 'var(--mint, #6FD9B0)' : '#FFFFFF',
+                boxShadow: qualityMode === 'compressed' ? '2px 2px 0 var(--ink, #3B2B26)' : 'none',
+                cursor: isUploading ? 'not-allowed' : 'pointer',
+                textAlign: 'left',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <div
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  background: '#FFFFFF',
+                  border: '1.5px solid var(--ink, #3B2B26)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-500" />
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--ink, #3B2B26)' }}>
+                  Compressed (Fast)
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#55423C', lineHeight: 1.2 }}>
+                  WhatsApp style • uses less data
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
 
         {/* Drag and Drop Zone button with cute playful styling */}
         <div

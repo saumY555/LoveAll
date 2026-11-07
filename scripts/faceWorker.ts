@@ -259,12 +259,16 @@ async function claimPendingPhotos(limit: number): Promise<ClaimedPhotoRow[]> {
   }, 'claimPendingPhotos');
 }
 
+const lastClusterTimes = new Map<string, number>();
+
 /**
- * Run clustering across all faces of an event when no photos remain pending or processing.
+ * Run clustering across active faces for an event on the fly.
+ * Throttled to at most once every 3.5 seconds per event unless forced when all photos finish.
  */
-async function runEventClusteringIfComplete(
+async function runEventClusteringLive(
   eventId: string,
-  daemon: PythonFaceDaemon
+  daemon: PythonFaceDaemon,
+  options: { force?: boolean } = {}
 ) {
   const pendingCount = await prisma.photo.count({
     where: {
@@ -274,14 +278,17 @@ async function runEventClusteringIfComplete(
     },
   });
 
-  if (pendingCount > 0) {
-    // Other photos for this event are still being processed
+  const isComplete = pendingCount === 0;
+  const now = Date.now();
+  const lastTime = lastClusterTimes.get(eventId) || 0;
+
+  // Throttle intermediate clustering while photos are actively uploading/processing
+  if (!isComplete && !options.force && now - lastTime < 3500) {
     return;
   }
+  lastClusterTimes.set(eventId, now);
 
-  console.log(`[FaceWorker] All photos completed for event "${eventId}". Running clustering...`);
-
-  // Fetch all active faces in event
+  // Fetch all active faces in event so far
   const allFaces = await prisma.face.findMany({
     where: {
       photo: {
@@ -298,16 +305,21 @@ async function runEventClusteringIfComplete(
   });
 
   if (allFaces.length === 0) {
-    // Delete any empty people
-    await prisma.person.deleteMany({
-      where: {
-        eventId,
-        faces: { none: {} },
-      },
-    });
-    console.log(`[FaceWorker] Event "${eventId}" has 0 faces. Cleaned up empty people.`);
+    if (isComplete) {
+      await prisma.person.deleteMany({
+        where: {
+          eventId,
+          faces: { none: {} },
+        },
+      });
+      console.log(`[FaceWorker] Event "${eventId}" has 0 faces. Cleaned up empty people.`);
+    }
     return;
   }
+
+  console.log(
+    `[FaceWorker] ${isComplete ? '[FINAL]' : '[LIVE]'} Running clustering for event "${eventId}" (${allFaces.length} faces, ${pendingCount} pending photos)...`
+  );
 
   // Run clustering via daemon
   const clusterResponse = await daemon.sendTask({
@@ -357,7 +369,7 @@ async function runEventClusteringIfComplete(
   });
 
   console.log(
-    `[FaceWorker] Clustering complete for event "${eventId}": ${clusterResult.clusters.length} clusters, ${finalPeopleCount} total people in DB.`
+    `[FaceWorker] ${isComplete ? '[FINAL]' : '[LIVE]'} Clustering complete for event "${eventId}": ${clusterResult.clusters.length} clusters, ${finalPeopleCount} total people in DB.`
   );
 }
 
@@ -480,9 +492,9 @@ async function main() {
         }
       }
 
-      // Check if any events completed all photos, and trigger clustering
+      // Check if any events had photos processed, and trigger live clustering
       for (const eventId of affectedEventIds) {
-        await runEventClusteringIfComplete(eventId, daemon);
+        await runEventClusteringLive(eventId, daemon);
       }
     } catch (loopErr) {
       console.error('[FaceWorker] Error in main loop:', loopErr);

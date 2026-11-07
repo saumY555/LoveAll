@@ -226,6 +226,8 @@ export default function EventDetailPage({
 
       if (data.isScanning || data.pending > 0 || data.processing > 0) {
         setIsScanning(true);
+        // Live update people and photos during active scan so newly grouped faces appear in real-time
+        await Promise.all([fetchPeople(), fetchPhotos()]);
       } else if (isScanningRef.current) {
         setIsScanning(false);
         await Promise.all([fetchPeople(), fetchPhotos()]);
@@ -237,7 +239,7 @@ export default function EventDetailPage({
 
   useEffect(() => {
     if (!isScanning) return;
-    const interval = setInterval(pollScanStatus, 3000);
+    const interval = setInterval(pollScanStatus, 2500);
     return () => clearInterval(interval);
   }, [isScanning, pollScanStatus]);
 
@@ -437,94 +439,132 @@ export default function EventDetailPage({
         eventId={event.id}
         onUploadProgress={(progress) => {
           setUploadProgress(progress);
+          // If upload is actively running and at least 1 photo has uploaded, start live face scanning!
+          if (progress.isUploading && progress.completedCount > 0 && !isScanningRef.current) {
+            setIsScanning(true);
+          }
         }}
         onPhotoUploaded={() => {
           fetchPhotos();
+          fetchPeople();
+          if (!isScanningRef.current) {
+            setIsScanning(true);
+          }
         }}
         onUploadComplete={() => {
+          setUploadProgress({
+            isUploading: false,
+            totalCount: 0,
+            completedCount: 0,
+            errorCount: 0,
+            progressPercent: 0,
+          });
           fetchPhotos();
           fetchPeople();
-          showToast(
-            `Uploaded ${uploadProgress.totalCount || 'photos'} successfully! Grouping faces in background…`
-          );
-          // Automatically start face grouping in background without needing user to click
+          showToast(`✓ Upload complete! Grouping faces in background…`);
           handleRunFaceScan(false);
         }}
       />
 
-      {/* Floating Background Upload Card (visible when modal is closed during upload) */}
-      {uploadProgress.isUploading && !isUploadModalOpen && (
-        <aside
-          className="bg-upload-card"
-          role="status"
-          aria-live="polite"
-        >
-          <div
-            style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '50%',
-              background: 'var(--tomato)',
-              border: '2px solid var(--ink)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
+      {/* Floating Background Upload Card (visible ONLY while uploads are actively in progress) */}
+      {uploadProgress.isUploading &&
+        uploadProgress.totalCount > 0 &&
+        uploadProgress.completedCount + uploadProgress.errorCount < uploadProgress.totalCount &&
+        !isUploadModalOpen && (
+          <aside
+            className="bg-upload-card"
+            role="status"
+            aria-live="polite"
           >
-            <Loader2 className="w-4 h-4 text-white animate-spin" />
-          </div>
-
-          <div style={{ flex: 1, minWidth: 0 }}>
             <div
               style={{
-                fontSize: '0.84rem',
-                fontWeight: 800,
-                color: 'var(--ink)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                background: 'var(--tomato)',
+                border: '2px solid var(--ink)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
               }}
             >
-              Uploading {uploadProgress.completedCount} of {uploadProgress.totalCount}…
+              <Loader2 className="w-4 h-4 text-white animate-spin" />
             </div>
-            <div
-              style={{
-                width: '100%',
-                height: '7px',
-                background: '#EAE1D9',
-                borderRadius: '999px',
-                overflow: 'hidden',
-                marginTop: '5px',
-                border: '1.5px solid var(--ink)',
-              }}
-            >
+
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div
                 style={{
-                  height: '100%',
-                  background: 'var(--mint)',
-                  width: `${uploadProgress.progressPercent}%`,
-                  transition: 'width 0.2s ease',
+                  fontSize: '0.84rem',
+                  fontWeight: 800,
+                  color: 'var(--ink)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
                 }}
-              />
+              >
+                Uploading {uploadProgress.completedCount} of {uploadProgress.totalCount}…
+              </div>
+              <div
+                style={{
+                  width: '100%',
+                  height: '7px',
+                  background: '#EAE1D9',
+                  borderRadius: '999px',
+                  overflow: 'hidden',
+                  marginTop: '5px',
+                  border: '1.5px solid var(--ink)',
+                }}
+              >
+                <div
+                  style={{
+                    height: '100%',
+                    background: 'var(--mint)',
+                    width: `${uploadProgress.progressPercent}%`,
+                    transition: 'width 0.2s ease',
+                  }}
+                />
+              </div>
             </div>
-          </div>
 
-          <button
-            type="button"
-            className="btn sm"
-            style={{
-              padding: '6px 12px',
-              fontSize: '0.8rem',
-              background: '#fff',
-              flexShrink: 0,
-            }}
-            onClick={() => setIsUploadModalOpen(true)}
-          >
-            View
-          </button>
-        </aside>
-      )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+              <button
+                type="button"
+                className="btn sm"
+                style={{
+                  padding: '6px 12px',
+                  fontSize: '0.8rem',
+                  background: '#fff',
+                }}
+                onClick={() => setIsUploadModalOpen(true)}
+              >
+                View
+              </button>
+              <button
+                type="button"
+                className="btn sm"
+                style={{
+                  padding: '6px 10px',
+                  fontSize: '0.8rem',
+                  background: '#fff',
+                }}
+                onClick={() => {
+                  setUploadProgress({
+                    isUploading: false,
+                    totalCount: 0,
+                    completedCount: 0,
+                    errorCount: 0,
+                    progressPercent: 0,
+                  });
+                }}
+                aria-label="Dismiss upload bar"
+                title="Dismiss"
+              >
+                ✕
+              </button>
+            </div>
+          </aside>
+        )}
 
       {/* Floating Confirmation Toast */}
       {toastMessage && (
