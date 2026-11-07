@@ -1,3 +1,12 @@
+import dns from 'node:dns';
+
+// Ensure reliable DNS resolution for cloud databases (e.g. Neon on AWS) across all networks/ISPs
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+} catch {
+  // Ignored in environments where setServers is restricted
+}
+
 import { spawn, ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import readline from 'node:readline';

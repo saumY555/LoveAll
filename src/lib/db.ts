@@ -1,4 +1,12 @@
+import dns from "node:dns";
 import { PrismaClient } from "@prisma/client";
+
+// Ensure reliable DNS resolution for cloud databases (e.g. Neon on AWS) across all networks/ISPs
+try {
+  dns.setServers(["8.8.8.8", "1.1.1.1", "8.8.4.4"]);
+} catch {
+  // Ignored in environments where setServers is restricted
+}
 
 function makePrismaClient() {
   const baseClient = new PrismaClient({
