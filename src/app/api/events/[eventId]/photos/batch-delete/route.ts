@@ -11,14 +11,16 @@ export async function POST(
   try {
     const { eventId } = await params;
     const session = await getAuthSession();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const userId = session?.user?.id;
+    const guestToken = req.cookies.get(`guest_token_${eventId}`)?.value || req.headers.get('x-guest-token');
+
+    const access = await checkEventAccess(eventId, userId, { guestToken });
+    if (!access.hasAccess) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    const userId = session.user.id;
-    const access = await checkEventAccess(eventId, userId);
-    if (!access.hasAccess || !access.role) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    if (!userId && !access.guestIdentity?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await req.json().catch(() => ({}));
@@ -51,7 +53,7 @@ export async function POST(
       });
     }
 
-    // Members can only delete photos they uploaded
+    // Members and guests can only delete photos they uploaded
     const photos = await prisma.photo.findMany({
       where: {
         id: { in: photoIds },
@@ -67,7 +69,10 @@ export async function POST(
     const userRefIdsToDelete: string[] = [];
 
     for (const p of photos) {
-      const userRef = p.uploadReferences.find((r) => r.uploadedByUserId === userId);
+      const userRef = p.uploadReferences.find((r) =>
+        (userId && r.uploadedByUserId === userId) ||
+        (access.guestIdentity?.id && r.guestUploaderId === access.guestIdentity.id)
+      );
       if (userRef) {
         userDeletablePhotos.push(p.id);
         userRefIdsToDelete.push(userRef.id);

@@ -25,7 +25,10 @@ interface GalleryGridSectionProps {
   isPhotosLoading?: boolean;
   onToggleSelectionMode: () => void;
   onToggleSelectPhoto: (photoId: string) => void;
+  onSelectAll: () => void;
+  onDeselectAll: () => void;
   onDownloadZip: () => void;
+  onDeleteSelected: () => void;
   onPhotoClick: (photo: GalleryPhoto) => void;
 }
 
@@ -41,14 +44,24 @@ export function GalleryGridSection({
   isPhotosLoading = false,
   onToggleSelectionMode,
   onToggleSelectPhoto,
+  onSelectAll,
+  onDeselectAll,
   onDownloadZip,
+  onDeleteSelected,
   onPhotoClick,
 }: GalleryGridSectionProps) {
   const photoCount = photos.length;
   const countLabel = `${photoCount} ${photoCount === 1 ? 'photo' : 'photos'}`;
-  const downloadLabel = isFilterActive
-    ? `Download ${photoCount}`
-    : `Download all`;
+  const selectedCount = selectedPhotoIds.length;
+  const isAllSelected = photoCount > 0 && selectedCount === photoCount;
+
+  const downloadLabel = isSelectionMode
+    ? selectedCount > 0
+      ? `Download (${selectedCount})`
+      : 'Download (0)'
+    : isFilterActive
+      ? `Download ${photoCount}`
+      : `Download all`;
 
   return (
     <section aria-labelledby="gl">
@@ -57,26 +70,90 @@ export function GalleryGridSection({
         <span className="tag" id="gc">
           {countLabel}
         </span>
+        {isSelectionMode && selectedCount > 0 && (
+          <span
+            className="tag"
+            style={{
+              background: 'var(--tomato)',
+              color: '#FFFFFF',
+              fontWeight: 800,
+            }}
+          >
+            {selectedCount} selected
+          </span>
+        )}
 
         <div className="tools">
-          <button
-            className="btn alt"
-            type="button"
-            id="dl"
-            onClick={onDownloadZip}
-            disabled={isDownloadingZip || photoCount === 0}
-          >
-            {isDownloadingZip ? 'Preparing ZIP…' : downloadLabel}
-          </button>
-          <button
-            className="btn sm"
-            type="button"
-            id="selbtn"
-            aria-pressed={isSelectionMode}
-            onClick={onToggleSelectionMode}
-          >
-            {isSelectionMode ? 'Done' : 'Select'}
-          </button>
+          {isSelectionMode ? (
+            <>
+              <button
+                className="btn sm white"
+                type="button"
+                id="selall"
+                onClick={isAllSelected ? onDeselectAll : onSelectAll}
+                disabled={photoCount === 0}
+              >
+                {isAllSelected ? 'Deselect all' : 'Select all'}
+              </button>
+              <button
+                className="btn alt"
+                type="button"
+                id="dl"
+                onClick={onDownloadZip}
+                disabled={isDownloadingZip || selectedCount === 0}
+                style={{
+                  opacity: selectedCount === 0 ? 0.6 : 1,
+                  cursor: selectedCount === 0 ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {isDownloadingZip ? 'Preparing ZIP…' : downloadLabel}
+              </button>
+              <button
+                className="btn go"
+                type="button"
+                id="delbtn"
+                onClick={onDeleteSelected}
+                disabled={selectedCount === 0}
+                style={{
+                  opacity: selectedCount === 0 ? 0.5 : 1,
+                  cursor: selectedCount === 0 ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Delete ({selectedCount})
+              </button>
+              <button
+                className="btn sm"
+                type="button"
+                id="selbtn"
+                aria-pressed={true}
+                onClick={onToggleSelectionMode}
+              >
+                Done
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                className="btn alt"
+                type="button"
+                id="dl"
+                onClick={onDownloadZip}
+                disabled={isDownloadingZip || photoCount === 0}
+              >
+                {isDownloadingZip ? 'Preparing ZIP…' : downloadLabel}
+              </button>
+              <button
+                className="btn sm"
+                type="button"
+                id="selbtn"
+                aria-pressed={false}
+                onClick={onToggleSelectionMode}
+                disabled={photoCount === 0}
+              >
+                Select
+              </button>
+            </>
+          )}
         </div>
       </div>
 

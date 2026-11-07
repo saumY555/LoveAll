@@ -539,8 +539,25 @@
 
 .loveall-gallery .gh .tools {
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
   margin-left: auto;
+}
+
+@media (max-width: 599px) {
+  .loveall-gallery .gh .tools {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .loveall-gallery .gh .btn {
+    min-height: 38px;
+    padding: 0 10px;
+    font-size: .82rem;
+    box-shadow: 2px 2px 0 var(--line);
+  }
 }
 
 .loveall-gallery .gh .btn {
@@ -682,10 +699,24 @@
   border-top: 2px solid var(--line);
 }
 
+.loveall-gallery .dock.selection-dock {
+  gap: 6px;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+}
+
 .loveall-gallery .dock .btn {
   flex: 1;
   padding: 0 12px;
   box-shadow: 3px 3px 0 var(--line);
+}
+
+.loveall-gallery .dock.selection-dock .btn {
+  flex: 1;
+  min-height: 42px;
+  padding: 0 6px;
+  font-size: clamp(0.72rem, 2.6vw, 0.84rem);
+  white-space: nowrap;
+  box-shadow: 2px 2px 0 var(--line);
 }
 
 .loveall-gallery .dock .btn:active {

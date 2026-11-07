@@ -284,6 +284,22 @@ export default function EventDetailPage({
     );
   };
 
+  const isAllPhotosSelected = photos.length > 0 && selectedPhotoIds.length === photos.length;
+
+  const handleSelectAllPhotos = useCallback(() => {
+    setSelectedPhotoIds(photos.map((p) => p.id));
+  }, [photos]);
+
+  const handleDeselectAllPhotos = useCallback(() => {
+    setSelectedPhotoIds([]);
+  }, []);
+
+  const handleOpenBatchDelete = useCallback(() => {
+    if (selectedPhotoIds.length > 0) {
+      setIsBatchDeleteModalOpen(true);
+    }
+  }, [selectedPhotoIds.length]);
+
   // Trigger ZIP Download
   const handleDownloadZip = async (specificPhotoIds?: string[]) => {
     setIsDownloadingZip(true);
@@ -412,6 +428,8 @@ export default function EventDetailPage({
               }
             }}
             onToggleSelectPhoto={handleToggleSelectPhoto}
+            onSelectAll={handleSelectAllPhotos}
+            onDeselectAll={handleDeselectAllPhotos}
             onDownloadZip={() => {
               if (isSelectionMode && selectedPhotoIds.length > 0) {
                 handleDownloadZip(selectedPhotoIds);
@@ -419,6 +437,7 @@ export default function EventDetailPage({
                 handleDownloadZip();
               }
             }}
+            onDeleteSelected={handleOpenBatchDelete}
             onPhotoClick={(p) => setLightboxPhoto(p)}
           />
         </main>
@@ -430,6 +449,17 @@ export default function EventDetailPage({
         onUploadPhotos={() => setIsUploadModalOpen(true)}
         onDownloadAll={() => handleDownloadZip()}
         isDownloading={isDownloadingZip}
+        isSelectionMode={isSelectionMode}
+        selectedCount={selectedPhotoIds.length}
+        isAllSelected={isAllPhotosSelected}
+        onSelectAll={handleSelectAllPhotos}
+        onDeselectAll={handleDeselectAllPhotos}
+        onDownloadSelected={() => handleDownloadZip(selectedPhotoIds)}
+        onDeleteSelected={handleOpenBatchDelete}
+        onExitSelectionMode={() => {
+          setIsSelectionMode(false);
+          setSelectedPhotoIds([]);
+        }}
       />
 
       {/* Modals */}
@@ -677,6 +707,7 @@ export default function EventDetailPage({
           setSelectedPhotoIds([]);
           setIsSelectionMode(false);
           setTotalPhotosCount((c) => Math.max(0, c - deletedIds.length));
+          showToast(`Deleted ${deletedIds.length} photo${deletedIds.length === 1 ? '' : 's'}`);
         }}
       />
     </div>
