@@ -7,7 +7,7 @@ import { Heart, Sparkles, Smile } from 'lucide-react';
 export function Footer() {
   const pathname = usePathname();
 
-  if (pathname === '/' || pathname === '/auth/signin' || pathname === '/events') {
+  if (pathname === '/' || pathname === '/auth/signin' || pathname.startsWith('/events')) {
     return null;
   }
   return (

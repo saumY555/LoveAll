@@ -140,6 +140,14 @@ export async function GET(
               storageKeyOriginal: true,
             },
           },
+          faces: {
+            where: { isNoise: false },
+            select: {
+              id: true,
+              personId: true,
+              thumbnailUrl: true,
+            },
+          },
           uploadReferences: {
             include: {
               uploadedByUser: {
@@ -202,6 +210,11 @@ export async function GET(
         thumbnailUrl: `/api/events/${eventId}/photos/${p.id}/thumbnail`,
         previewUrl: `/api/events/${eventId}/photos/${p.id}/preview`,
         downloadUrl: `/api/events/${eventId}/photos/${p.id}/original`,
+        faces: p.faces.map((f) => ({
+          id: f.id,
+          personId: f.personId,
+          thumbnailUrl: f.thumbnailUrl,
+        })),
       };
     });
 

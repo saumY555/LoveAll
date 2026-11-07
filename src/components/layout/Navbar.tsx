@@ -12,7 +12,7 @@ export function Navbar({ onOpenCreateModal }: { onOpenCreateModal?: () => void }
   const pathname = usePathname();
   const { data: session, status } = useSession();
 
-  if (pathname === '/' || pathname === '/auth/signin' || pathname === '/events') {
+  if (pathname === '/' || pathname === '/auth/signin' || pathname.startsWith('/events')) {
     return null;
   }
 

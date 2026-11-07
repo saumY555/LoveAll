@@ -27,6 +27,11 @@ export interface GalleryPhoto {
   thumbnailUrl: string;
   previewUrl: string;
   downloadUrl: string;
+  faces?: Array<{
+    id: string;
+    personId: string | null;
+    thumbnailUrl: string | null;
+  }>;
 }
 
 interface PhotoThumbnailCardProps {
