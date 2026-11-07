@@ -55,11 +55,11 @@ export function Modal({
       {/* Modal Dialog Content */}
       <div
         className={cn(
-          'relative w-full rounded-3xl bg-white/95 p-6 sm:p-7 shadow-2xl shadow-purple-950/10 dark:bg-stone-900/95 border-2 border-stone-200/90 dark:border-stone-800 z-10 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md',
+          'relative w-full max-h-[92vh] sm:max-h-[88vh] flex flex-col rounded-3xl bg-white/95 p-6 sm:p-7 shadow-2xl shadow-purple-950/10 dark:bg-stone-900/95 border-2 border-stone-200/90 dark:border-stone-800 z-10 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md',
           maxWidths[maxWidth]
         )}
       >
-        <div className="flex items-start justify-between pb-4 border-b border-stone-150 dark:border-stone-800/80">
+        <div className="flex items-start justify-between pb-4 border-b border-stone-150 dark:border-stone-800/80 shrink-0">
           <div>
             <h2 className="text-lg font-bold text-stone-900 dark:text-stone-100 flex items-center gap-2">
               {title}
@@ -79,7 +79,7 @@ export function Modal({
           </button>
         </div>
 
-        <div className="mt-4">{children}</div>
+        <div className="mt-4 flex-1 overflow-y-auto overscroll-contain pr-1">{children}</div>
       </div>
     </div>
   );

@@ -13,6 +13,8 @@ import {
   Trash2,
   Zap,
   Image as ImageIcon,
+  Loader2,
+  Plus,
 } from 'lucide-react';
 import { formatBytes } from '@/lib/utils';
 import { compressImageClientSide } from '@/lib/clientImageCompression';
@@ -593,39 +595,67 @@ export function UploadDropzoneModal({
           </div>
         </div>
 
-        {/* Drag and Drop Zone button with cute playful styling */}
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => fileInputRef.current?.click()}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              fileInputRef.current?.click();
-            }
-          }}
-          onDragEnter={handleDragEnter}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          className={`relative flex flex-col items-center justify-center rounded-3xl border-2 border-dashed p-8 sm:p-10 text-center cursor-pointer transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-purple-400 ${
-            isDragging
-              ? 'border-pink-500 bg-pink-50/80 dark:bg-pink-950/40 scale-[1.01]'
-              : 'border-purple-200 hover:border-purple-400 bg-gradient-to-br from-pink-50/30 via-purple-50/20 to-amber-50/20 dark:border-purple-900/60 dark:bg-stone-850 hover:bg-purple-50/40'
-          }`}
-        >
-          <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-gradient-to-tr from-pink-500 via-purple-500 to-indigo-500 text-white shadow-md shadow-pink-500/20 mb-3 mx-auto pointer-events-none select-none animate-float">
-            <Upload className="h-7 w-7" />
-          </div>
+        {/* Prominent Primary Upload Action Button right at top when files selected */}
+        {queuedCount > 0 && !isUploading && (
+          <button
+            type="button"
+            onClick={handleStartUpload}
+            className="w-full py-3.5 px-5 rounded-2xl bg-[#E8714F] hover:bg-[#d66140] text-white font-black text-sm sm:text-base flex items-center justify-between gap-3 border-2 border-[var(--ink,#3B2B26)] shadow-[3px_3px_0px_var(--ink,#3B2B26)] active:translate-y-0.5 active:shadow-[1px_1px_0px_var(--ink,#3B2B26)] transition-all cursor-pointer"
+          >
+            <div className="flex items-center gap-2">
+              <Upload className="w-5 h-5 stroke-[2.5]" />
+              <span>Upload {queuedCount} Photo{queuedCount === 1 ? '' : 's'}</span>
+            </div>
+            <span className="text-xs font-black px-2.5 py-1 rounded-full bg-[#FFC83D] text-[#3B2B26] border border-[#3B2B26]">
+              {qualityMode === 'compressed' ? '⚡ Fast' : '📷 High-Res'} • Start ➔
+            </span>
+          </button>
+        )}
 
-          <p className="text-sm font-bold text-stone-900 dark:text-stone-100 pointer-events-none select-none flex items-center justify-center gap-1.5">
-            <span>Click to select photos or drag & drop here</span>
-            <span className="text-pink-500">✨</span>
-          </p>
-          <p className="mt-1 text-xs text-stone-500 pointer-events-none select-none font-medium">
-            JPEG, PNG, WebP, HEIC up to 50MB. High-res originals preserved safely.
-          </p>
-        </div>
+        {/* Drag and Drop Zone button: collapsed when photos are already picked */}
+        {items.length === 0 ? (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`relative flex flex-col items-center justify-center rounded-3xl border-2 border-dashed p-8 sm:p-10 text-center cursor-pointer transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-purple-400 ${
+              isDragging
+                ? 'border-pink-500 bg-pink-50/80 dark:bg-pink-950/40 scale-[1.01]'
+                : 'border-purple-200 hover:border-purple-400 bg-gradient-to-br from-pink-50/30 via-purple-50/20 to-amber-50/20 dark:border-purple-900/60 dark:bg-stone-850 hover:bg-purple-50/40'
+            }`}
+          >
+            <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-gradient-to-tr from-pink-500 via-purple-500 to-indigo-500 text-white shadow-md shadow-pink-500/20 mb-3 mx-auto pointer-events-none select-none animate-float">
+              <Upload className="h-7 w-7" />
+            </div>
+
+            <p className="text-sm font-bold text-stone-900 dark:text-stone-100 pointer-events-none select-none flex items-center justify-center gap-1.5">
+              <span>Click to select photos or drag & drop here</span>
+              <span className="text-pink-500">✨</span>
+            </p>
+            <p className="mt-1 text-xs text-stone-500 pointer-events-none select-none font-medium">
+              JPEG, PNG, WebP, HEIC up to 50MB. High-res originals preserved safely.
+            </p>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full py-2.5 px-4 rounded-xl border-2 border-dashed border-purple-300 dark:border-purple-800/80 hover:border-purple-500 bg-purple-50/50 dark:bg-stone-850 hover:bg-purple-50 transition-all flex items-center justify-center gap-2 text-xs font-bold text-stone-700 dark:text-stone-300 cursor-pointer"
+          >
+            <Plus className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+            <span>Add more photos</span>
+          </button>
+        )}
 
         {/* Selected Files Header & List */}
         {items.length > 0 && (
@@ -646,7 +676,7 @@ export function UploadDropzoneModal({
             </div>
 
             {/* Scrollable list with content-visibility for instant 60fps rendering */}
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800 max-h-64 overflow-y-auto overscroll-contain">
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800 max-h-48 sm:max-h-56 overflow-y-auto overscroll-contain">
               {items.map((item) => (
                 <UploadItemRow
                   key={item.id}
@@ -660,8 +690,8 @@ export function UploadDropzoneModal({
           </div>
         )}
 
-        {/* Modal Footer */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+        {/* Sticky Modal Footer */}
+        <div className="sticky bottom-0 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md pt-3 pb-1 border-t-2 border-stone-200 dark:border-stone-800 flex flex-col sm:flex-row items-center justify-between gap-3 z-10 -mx-1 px-1">
           <div className="text-xs text-zinc-500">
             {totalCount > 0 ? (
               <span>
@@ -698,8 +728,9 @@ export function UploadDropzoneModal({
                 size="sm"
                 onClick={handleStartUpload}
                 disabled={items.length === 0}
+                className="shadow-[2px_2px_0_var(--ink,#3B2B26)] font-bold px-4"
               >
-                Upload {queuedCount} Photo{queuedCount === 1 ? '' : 's'}
+                Upload {queuedCount} Photo{queuedCount === 1 ? '' : 's'} 🚀
               </Button>
             )}
           </div>
