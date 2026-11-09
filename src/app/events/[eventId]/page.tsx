@@ -228,7 +228,7 @@ export default function EventDetailPage({
         setIsScanning(true);
         // Live update people and photos during active scan so newly grouped faces appear in real-time
         await Promise.all([fetchPeople(), fetchPhotos()]);
-      } else if (isScanningRef.current) {
+      } else {
         setIsScanning(false);
         await Promise.all([fetchPeople(), fetchPhotos()]);
       }
@@ -257,13 +257,14 @@ export default function EventDetailPage({
           setIsScanning(false);
           return;
         }
+        await Promise.all([fetchPeople(), fetchPhotos()]);
         await pollScanStatus();
       } catch (err: unknown) {
         if (showAlert) alert((err as Error).message);
         setIsScanning(false);
       }
     },
-    [eventId, pollScanStatus]
+    [eventId, pollScanStatus, fetchPeople, fetchPhotos]
   );
 
   // Toggle Person Filter

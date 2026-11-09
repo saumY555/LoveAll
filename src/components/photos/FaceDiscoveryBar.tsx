@@ -75,9 +75,17 @@ export function FaceDiscoveryBar({
   const [renamingPerson, setRenamingPerson] = useState<DiscoveredPerson | null>(null);
   const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
 
+  // Ref-mirror of isScanning so pollScanStatus never captures a stale value
+  const isScanningRef = React.useRef(false);
+
   const effectiveSelectedIds = selectedPersonIds ?? (activePersonId ? [activePersonId] : []);
   const effectiveMode = filterMode ?? 'all';
   const selectedPeopleList = people.filter((p) => effectiveSelectedIds.includes(p.id));
+
+  // Keep ref in sync with state so callbacks always read the latest value
+  React.useEffect(() => {
+    isScanningRef.current = isScanning;
+  }, [isScanning]);
 
   const labelText = (() => {
     if (effectiveSelectedIds.includes('none')) {
@@ -129,7 +137,9 @@ export function FaceDiscoveryBar({
         setIsScanning(true);
         setScanMessage(`Processing ${data.done} of ${data.total} photos...`);
       } else {
-        if (isScanning || (scanMessage && scanMessage.startsWith('Processing'))) {
+        // Use the ref to read the live value — avoids stale-closure bug
+        // where isScanning from the closed-over state never updates
+        if (isScanningRef.current) {
           // Was scanning, now complete
           setIsScanning(false);
           setScanMessage('Face processing complete!');
@@ -143,7 +153,10 @@ export function FaceDiscoveryBar({
     } catch (err) {
       console.warn('Failed to poll face scan status:', err);
     }
-  }, [eventId, isScanning, fetchPeople, onRefreshPhotos]);
+    // isScanningRef is a ref — deliberately omitted from deps so this callback
+    // is stable and never recreated on every isScanning/scanMessage state change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, fetchPeople, onRefreshPhotos]);
 
   // Initial load: fetch people & initial face status
   useEffect(() => {

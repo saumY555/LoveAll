@@ -2,6 +2,7 @@ import dns from 'node:dns';
 
 // Ensure reliable DNS resolution for cloud databases (e.g. Neon on AWS) across all networks/ISPs
 try {
+  dns.setDefaultResultOrder('ipv4first');
   dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
 } catch {
   // Ignored in environments where setServers is restricted
@@ -17,10 +18,12 @@ import {
   ClusterResult,
 } from '../src/lib/faceService';
 
-const BATCH_SIZE = 10;
+const BATCH_SIZE = 20;
 const SLEEP_IDLE_MS = 2000;
 const RECOVERY_INTERVAL_MS = 30_000; // Recover stale photos every 30 seconds
-const STALE_PHOTO_TIMEOUT_MS = 60_000; // Reset photos stuck in PROCESSING for > 60 seconds
+const STALE_PHOTO_TIMEOUT_MS = 180_000; // Reset photos stuck in PROCESSING for > 3 min
+// Only run intermediate (live-preview) clustering every this many batches; always run on completion
+const CLUSTER_EVERY_N_BATCHES = 5;
 
 async function withDbRetry<T>(
   operation: () => Promise<T>,
@@ -222,7 +225,7 @@ async function recoverStaleProcessingPhotos() {
 
   if (result.count > 0) {
     console.log(
-      `[FaceWorker] [CRASH RECOVERY] Reset ${result.count} stale photos (> 60s) back to PENDING.`
+      `[FaceWorker] [CRASH RECOVERY] Reset ${result.count} stale photos (> 3 min) back to PENDING.`
     );
   }
 }
@@ -283,7 +286,7 @@ async function runEventClusteringLive(
   const lastTime = lastClusterTimes.get(eventId) || 0;
 
   // Throttle intermediate clustering while photos are actively uploading/processing
-  if (!isComplete && !options.force && now - lastTime < 3500) {
+  if (!isComplete && !options.force && now - lastTime < 30_000) {
     return;
   }
   lastClusterTimes.set(eventId, now);
@@ -330,7 +333,7 @@ async function runEventClusteringLive(
       confidence: f.confidence,
     })),
     eps: 0.50,
-    minSamples: 2,
+    minSamples: 1,
   });
 
   if (!clusterResponse.success || !clusterResponse.result) {
@@ -380,10 +383,12 @@ async function main() {
 
   const daemon = new PythonFaceDaemon();
 
-  // Run initial crash recovery on worker startup
-  await recoverStaleProcessingPhotos();
+  // Run initial crash recovery on worker startup — wrapped in retry so a
+  // cold/suspended Neon DB doesn't crash the worker before it starts polling.
+  await withDbRetry(() => recoverStaleProcessingPhotos(), 'startup:recoverStaleProcessingPhotos');
 
   let lastRecoveryTime = Date.now();
+  let batchesProcessed = 0;
   let isRunning = true;
 
   const shutdown = () => {
@@ -400,10 +405,14 @@ async function main() {
 
   while (isRunning) {
     try {
-      // Periodic crash recovery every 60 seconds
+      // Periodic crash recovery every 30 seconds
       if (Date.now() - lastRecoveryTime > RECOVERY_INTERVAL_MS) {
-        await recoverStaleProcessingPhotos();
         lastRecoveryTime = Date.now();
+        try {
+          await withDbRetry(() => recoverStaleProcessingPhotos(), 'recoverStaleProcessingPhotos');
+        } catch (recErr) {
+          console.warn('[FaceWorker] Periodic recovery error (will retry next interval):', recErr);
+        }
       }
 
       // Claim batch of pending photos
@@ -414,28 +423,55 @@ async function main() {
         continue;
       }
 
-      console.log(`[FaceWorker] Claimed ${claimedPhotos.length} photos for processing.`);
+      batchesProcessed++;
+      console.log(`[FaceWorker] Claimed ${claimedPhotos.length} photos for processing (batch #${batchesProcessed}).`);
 
       const affectedEventIds = new Set<string>();
+      claimedPhotos.forEach((p) => affectedEventIds.add(p.eventId));
 
-      for (const photo of claimedPhotos) {
-        affectedEventIds.add(photo.eventId);
+      // --- FIX #2: Parallel detection + DB writes ---
+      // All detection tasks are queued to the Python daemon at once (they will
+      // still be executed sequentially inside Python, but each photo's DB write
+      // now runs concurrently with the NEXT photo's detection, cutting wall time
+      // roughly in half for large batches).
+      const detectionPromises = claimedPhotos.map(async (photo) => {
         const imagePath = path.resolve(process.cwd(), 'storage', photo.storageKeyOriginal);
-
         try {
           const res = await daemon.sendTask({
             action: 'detect',
             photoId: photo.id,
             imagePath,
-            conf: 0.65,
-            minFaceSize: 45,
+            conf: 0.48,
+            minFaceSize: 18,
           });
-
           if (!res.success) {
             throw new Error(res.error || 'Face detection returned unsuccessful');
           }
+          return { photo, faces: (res.faces || []) as DetectedFace[], error: null as null };
+        } catch (err: any) {
+          return { photo, faces: [] as DetectedFace[], error: err as Error };
+        }
+      });
 
-          const detectedFaces = res.faces || [];
+      // Persist each result as soon as its detection resolves (all DB writes run in parallel)
+      await Promise.all(
+        detectionPromises.map(async (resultPromise) => {
+          const { photo, faces, error } = await resultPromise;
+
+          if (error) {
+            console.error(`[FaceWorker] Error processing photo ${photo.id}:`, error.message);
+            await prisma.photo
+              .update({
+                where: { id: photo.id },
+                data: {
+                  faceStatus: 'FAILED',
+                  faceError: error.message || 'Unknown error during face scan',
+                  faceProcessedAt: new Date(),
+                },
+              })
+              .catch((err) => console.error('[FaceWorker] Failed to mark photo FAILED:', err));
+            return;
+          }
 
           // Persist faces and mark photo DONE with automatic retry
           await withDbRetry(
@@ -443,13 +479,11 @@ async function main() {
               prisma.$transaction(
                 async (tx) => {
                   // Delete old faces for this photo (e.g. on rescan)
-                  await tx.face.deleteMany({
-                    where: { photoId: photo.id },
-                  });
+                  await tx.face.deleteMany({ where: { photoId: photo.id } });
 
-                  if (detectedFaces.length > 0) {
+                  if (faces.length > 0) {
                     await tx.face.createMany({
-                      data: detectedFaces.map((f) => ({
+                      data: faces.map((f) => ({
                         id: crypto.randomUUID(),
                         photoId: photo.id,
                         boundingBox: f.boundingBox,
@@ -475,26 +509,24 @@ async function main() {
             `saveFaces(${photo.id})`
           );
 
-          console.log(
-            `[FaceWorker] Photo ${photo.id}: ${detectedFaces.length} face(s) saved -> DONE`
-          );
-        } catch (photoErr: any) {
-          console.error(`[FaceWorker] Error processing photo ${photo.id}:`, photoErr.message);
+          console.log(`[FaceWorker] Photo ${photo.id}: ${faces.length} face(s) saved -> DONE`);
+        })
+      );
 
-          await prisma.photo.update({
-            where: { id: photo.id },
-            data: {
-              faceStatus: 'FAILED',
-              faceError: photoErr.message || 'Unknown error during face scan',
-              faceProcessedAt: new Date(),
-            },
-          }).catch((err) => console.error('[FaceWorker] Failed to mark photo FAILED:', err));
-        }
-      }
-
-      // Check if any events had photos processed, and trigger live clustering
+      // --- FIX #1: Lazy clustering ---
+      // Run clustering only when the event is fully done (always), or every
+      // CLUSTER_EVERY_N_BATCHES batches as a live-preview update (much less often
+      // than the old once-per-10-photo approach, eliminating the O(n²) storm).
+      const isNthBatch = batchesProcessed % CLUSTER_EVERY_N_BATCHES === 0;
       for (const eventId of affectedEventIds) {
-        await runEventClusteringLive(eventId, daemon);
+        const pendingLeft = await prisma.photo.count({
+          where: { eventId, isDeleted: false, faceStatus: { in: ['PENDING', 'PROCESSING'] } },
+        });
+        const isEventComplete = pendingLeft === 0;
+
+        if (isEventComplete || isNthBatch) {
+          await runEventClusteringLive(eventId, daemon, { force: isEventComplete });
+        }
       }
     } catch (loopErr) {
       console.error('[FaceWorker] Error in main loop:', loopErr);

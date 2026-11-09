@@ -13,26 +13,26 @@ def main():
     detect_parser.add_argument("--image", required=True, help="Path to input image")
     detect_parser.add_argument("--outputDir", required=True, help="Directory to save face crops")
     detect_parser.add_argument("--photoId", default="", help="Photo identifier")
-    detect_parser.add_argument("--conf", type=float, default=0.65, help="Confidence threshold")
+    detect_parser.add_argument("--conf", type=float, default=0.48, help="Confidence threshold")
     detect_parser.add_argument("--threads", type=int, default=None, help="ONNX intra_op_num_threads")
 
     # Command: batch-detect (multiple photos in one model session)
     batch_parser = subparsers.add_parser("batch-detect")
     batch_parser.add_argument("--inputFile", help="Path to JSON file containing list of photos")
     batch_parser.add_argument("--outputDir", required=True, help="Directory to save face crops")
-    batch_parser.add_argument("--conf", type=float, default=0.65, help="Confidence threshold")
+    batch_parser.add_argument("--conf", type=float, default=0.48, help="Confidence threshold")
     batch_parser.add_argument("--threads", type=int, default=None, help="ONNX intra_op_num_threads")
 
     # Command: cluster
     cluster_parser = subparsers.add_parser("cluster")
     cluster_parser.add_argument("--inputFile", help="Path to JSON file containing face embeddings")
     cluster_parser.add_argument("--eps", type=float, default=0.50, help="Cosine distance threshold (default: 0.50)")
-    cluster_parser.add_argument("--minSamples", type=int, default=2, help="Minimum cluster size")
+    cluster_parser.add_argument("--minSamples", type=int, default=1, help="Minimum cluster size")
 
     # Command: worker (interactive line-by-line daemon: model loaded ONCE)
     worker_parser = subparsers.add_parser("worker")
     worker_parser.add_argument("--outputDir", required=True, help="Directory to save face crops")
-    worker_parser.add_argument("--conf", type=float, default=0.65, help="Confidence threshold")
+    worker_parser.add_argument("--conf", type=float, default=0.48, help="Confidence threshold")
     worker_parser.add_argument("--threads", type=int, default=None, help="ONNX intra_op_num_threads")
 
     args = parser.parse_args()
@@ -45,7 +45,7 @@ def main():
                 output_faces_dir=args.outputDir,
                 conf_threshold=args.conf,
                 photo_id=args.photoId,
-                min_face_size=45
+                min_face_size=18
             )
             print(json.dumps({"success": True, "faces": faces}))
         except Exception as e:
@@ -65,7 +65,7 @@ def main():
                 items=items,
                 output_faces_dir=args.outputDir,
                 conf_threshold=args.conf,
-                min_face_size=45
+                min_face_size=18
             )
             print(json.dumps({"success": True, "results": results}))
         except Exception as e:
@@ -116,14 +116,14 @@ def main():
                             output_faces_dir=args.outputDir,
                             conf_threshold=task.get("conf", args.conf),
                             photo_id=task.get("photoId", ""),
-                            min_face_size=task.get("minFaceSize", 45)
+                            min_face_size=task.get("minFaceSize", 18)
                         )
                         sys.stdout.write(json.dumps({"success": True, "photoId": task.get("photoId", ""), "faces": faces}) + "\n")
                     elif action == "cluster":
                         result = FaceEngine.cluster_faces(
                             faces_data=task["faces"],
                             eps=task.get("eps", 0.50),
-                            min_samples=task.get("minSamples", 2)
+                            min_samples=task.get("minSamples", 1)
                         )
                         sys.stdout.write(json.dumps({"success": True, "result": result}) + "\n")
                     else:

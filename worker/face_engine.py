@@ -6,7 +6,11 @@ import numpy as np
 from PIL import Image
 import onnxruntime as ort
 from insightface.app import FaceAnalysis
-from sklearn.cluster import AgglomerativeClustering
+# sklearn's AgglomerativeClustering triggers _reachability.pyd which is blocked
+# by Windows Application Control policies on some machines.
+# Use scipy's equivalent (linkage + fcluster) instead — same algorithm, no blocked DLL.
+from scipy.cluster.hierarchy import linkage, fcluster
+from scipy.spatial.distance import pdist
 
 class FaceEngine:
     def __init__(
@@ -61,8 +65,8 @@ class FaceEngine:
         img_bgr,
         photo_id: str,
         output_faces_dir: str,
-        conf_threshold: float = 0.65,
-        min_face_size: int = 45
+        conf_threshold: float = 0.48,
+        min_face_size: int = 18
     ):
         orig_h, orig_w = img_bgr.shape[:2]
         raw_faces = self.app.get(img_bgr)
@@ -155,8 +159,8 @@ class FaceEngine:
         self,
         items,
         output_faces_dir: str,
-        conf_threshold: float = 0.65,
-        min_face_size: int = 45
+        conf_threshold: float = 0.48,
+        min_face_size: int = 18
     ):
         """
         Process multiple photos in a single model session for maximum speed.
@@ -190,12 +194,13 @@ class FaceEngine:
         return results
 
     @staticmethod
-    def cluster_faces(faces_data, eps=0.50, min_samples=2):
+    def cluster_faces(faces_data, eps=0.50, min_samples=1):
         """
-        Cluster face embeddings using AgglomerativeClustering (average linkage)
-        with cosine distance.
-        eps: cosine distance threshold (default: 0.50, equivalent to cosine similarity >= 0.50).
-        min_samples: minimum faces required to form a cluster (default: 2).
+        Cluster face embeddings using scipy's agglomerative clustering (average linkage,
+        cosine distance) — equivalent to sklearn's AgglomerativeClustering but avoids
+        the _reachability.pyd DLL that is blocked by Windows Application Control.
+        eps: cosine distance threshold (default: 0.50).
+        min_samples: minimum faces required to form a cluster (default: 1).
         """
         if not faces_data:
             return {"clusters": [], "noiseFaceIds": []}
@@ -222,27 +227,24 @@ class FaceEngine:
         norms[norms == 0] = 1.0
         embeddings = embeddings / norms
 
-        face_ids = [f["id"] for f in faces_data]
-
-        clustering = AgglomerativeClustering(
-            n_clusters=None,
-            metric='cosine',
-            linkage='average',
-            distance_threshold=eps
-        ).fit(embeddings)
-
-        labels = clustering.labels_
+        # Pairwise cosine distances → average-linkage dendrogram → cut at eps
+        # This is mathematically identical to sklearn AgglomerativeClustering(
+        #   metric='cosine', linkage='average', distance_threshold=eps)
+        dists = pdist(embeddings, metric='cosine')
+        Z = linkage(dists, method='average')
+        # fcluster returns 1-based labels; subtract 1 to 0-index
+        raw_labels = fcluster(Z, t=eps, criterion='distance') - 1
 
         clusters_dict = {}
-        for idx, label in enumerate(labels):
+        for idx, label in enumerate(raw_labels):
             if label not in clusters_dict:
                 clusters_dict[label] = []
             clusters_dict[label].append(faces_data[idx])
 
         clusters_output = []
         noise_ids = []
-
         cluster_counter = 0
+
         for raw_label, group in sorted(clusters_dict.items()):
             if len(group) < min_samples:
                 for f in group:

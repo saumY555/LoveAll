@@ -231,7 +231,7 @@ export async function runPythonClustering(
   const pythonPath = getPythonPath();
   const scriptPath = getCliScriptPath();
   const eps = options?.eps ?? 0.50;
-  const minSamples = options?.minSamples ?? 2;
+  const minSamples = options?.minSamples ?? 1;
 
   const inputFaces = faces.map((f) => ({
     id: f.id,

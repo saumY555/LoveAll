@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { checkEventAccess } from '@/lib/permissions';
+import { runPythonClustering, persistScanAndClusterTransaction } from '@/lib/faceService';
 
 /**
  * POST /api/events/[eventId]/faces/scan
@@ -53,7 +54,10 @@ export async function POST(
         where: {
           eventId,
           isDeleted: false,
-          faceStatus: { in: ['PENDING', 'FAILED'] },
+          OR: [
+            { faceStatus: { in: ['PENDING', 'FAILED'] } },
+            { faces: { none: {} } },
+          ],
         },
         data: {
           faceStatus: 'PENDING',
@@ -85,16 +89,78 @@ export async function POST(
       else if (group.faceStatus === 'FAILED') counts.failed = group._count._all;
     }
 
+    // If no photos need detection (all already DONE or none queued), run clustering
+    // immediately on all faces so grouping completes synchronously without waiting
+    let clusteredCount = 0;
+    if (counts.pending === 0 && counts.processing === 0) {
+      const allFaces = await prisma.face.findMany({
+        where: {
+          photo: {
+            eventId,
+            isDeleted: false,
+          },
+        },
+        select: {
+          id: true,
+          embedding: true,
+          confidence: true,
+          thumbnailUrl: true,
+        },
+      });
+
+      if (allFaces.length > 0) {
+        const clusterResult = await runPythonClustering(
+          allFaces.map((f) => ({
+            id: f.id,
+            embedding: f.embedding as unknown as number[],
+            confidence: f.confidence,
+            thumbnailUrl: f.thumbnailUrl,
+          })),
+          {
+            eps: 0.50,
+            minSamples: 1,
+          }
+        );
+
+        const existingPeople = await prisma.person.findMany({
+          where: { eventId },
+          include: { faces: { select: { id: true } } },
+        });
+
+        const allFacesMap = new Map(
+          allFaces.map((f) => [
+            f.id,
+            { ...f, embedding: f.embedding as unknown as number[] },
+          ])
+        );
+
+        await persistScanAndClusterTransaction({
+          eventId,
+          successfulPhotoIds: [],
+          allDetectedFaces: [],
+          clusterResult,
+          existingPeople,
+          allFacesMap,
+        });
+
+        clusteredCount = clusterResult.clusters.length;
+      }
+    }
+
     return NextResponse.json(
       {
         success: true,
-        message: forceRescan
-          ? `Queued all ${updateResult.count} photos for face scan.`
-          : `Queued ${updateResult.count} photos for face scan.`,
+        message:
+          counts.pending > 0
+            ? forceRescan
+              ? `Queued all ${updateResult.count} photos for face scan.`
+              : `Queued ${updateResult.count} photos for face scan.`
+            : `Faces grouped into ${clusteredCount} people!`,
         queuedCount: updateResult.count,
+        clusteredCount,
         counts,
       },
-      { status: 202 }
+      { status: counts.pending > 0 ? 202 : 200 }
     );
   } catch (err: unknown) {
     console.error('[API faces scan POST error]:', err);

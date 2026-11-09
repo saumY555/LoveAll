@@ -1,11 +1,12 @@
 import dns from "node:dns";
 import { PrismaClient } from "@prisma/client";
 
-// Ensure reliable DNS resolution for cloud databases (e.g. Neon on AWS) across all networks/ISPs
+// Prefer IPv4 across all networks/ISPs to prevent hanging on broken IPv6 routes
 try {
+  dns.setDefaultResultOrder("ipv4first");
   dns.setServers(["8.8.8.8", "1.1.1.1", "8.8.4.4"]);
 } catch {
-  // Ignored in environments where setServers is restricted
+  // Ignored in environments where setServers or setDefaultResultOrder is restricted
 }
 
 function makePrismaClient() {
