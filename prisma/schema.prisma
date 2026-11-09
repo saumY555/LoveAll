@@ -223,13 +223,15 @@ model PhotoUploadReference {
 // ----------------------------------------------------
 
 model Person {
-  id           String    @id @default(cuid())
-  eventId      String
-  name         String?   // User-defined name or null for "Person 1", "Person 2"
-  thumbnailUrl String?   // Cropped face thumbnail URL (representative avatar)
-  isCover      Boolean   @default(false)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  eventId        String
+  name           String?   // User-defined name or null for "Person 1", "Person 2"
+  thumbnailUrl   String?   // Cropped face thumbnail URL (representative avatar)
+  isCover        Boolean   @default(false)
+  isHidden       Boolean   @default(false)
+  hiddenCentroid Json?     // 512-d centroid of a hidden person to survive re-scans
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   event Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
   faces Face[]
@@ -246,6 +248,15 @@ model Face {
   thumbnailUrl String?  // Cropped face thumbnail URL
   confidence   Float    @default(0.0) // Face detection confidence score
   isNoise      Boolean  @default(false)
+  blurScore    Float?   // Normalized 112px Laplacian variance
+  brightness   Float?   // Mean grayscale brightness 0-255
+  yawDeg       Float?   // Estimated horizontal head angle (-90 to +90)
+  rollDeg      Float?   // Estimated in-plane tilt angle
+  pitchDeg     Float?   // Estimated vertical head angle
+  boxWidth     Int?     // Pixel width on original image
+  boxHeight    Int?     // Pixel height on original image
+  landmarks    Json?    // 5 landmark points [[x,y], ...]
+  isLowQuality Boolean  @default(false)
   createdAt    DateTime @default(now())
 
   photo  Photo   @relation(fields: [photoId], references: [id], onDelete: Cascade)
