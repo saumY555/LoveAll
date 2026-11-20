@@ -25,6 +25,7 @@ interface FindByPersonCardProps {
   matchingCount: number;
   totalPhotosCount: number;
   isScanning: boolean;
+  serviceWarning?: string | null;
   onGroupFaces: () => void;
   onOpenPrivacy: () => void;
   onRenamePerson?: (person: DiscoveredPerson) => void;
@@ -40,6 +41,7 @@ export function FindByPersonCard({
   matchingCount,
   totalPhotosCount,
   isScanning,
+  serviceWarning,
   onGroupFaces,
   onOpenPrivacy,
   onRenamePerson,
@@ -67,7 +69,22 @@ export function FindByPersonCard({
         <span className="tag" id="pn">
           {people.length} {people.length === 1 ? 'person' : 'people'}
         </span>
-        {isScanning && (
+        {serviceWarning ? (
+          <span
+            className="tag"
+            style={{
+              background: '#fee2e2',
+              color: '#991b1b',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              border: '2px solid #ef4444',
+              fontWeight: 700,
+            }}
+          >
+            <span>⚠️ {serviceWarning}</span>
+          </span>
+        ) : isScanning ? (
           <span
             className="tag"
             style={{
@@ -82,7 +99,7 @@ export function FindByPersonCard({
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
             <span>Grouping faces in background…</span>
           </span>
-        )}
+        ) : null}
       </div>
       <p className="hint">Tap a friend. Tap two to see photos of them together.</p>
 
@@ -169,6 +186,10 @@ export function FindByPersonCard({
           onModeChange={onModeChange}
           onClear={onClearSelection}
           matchingCount={matchingCount}
+          onManagePerson={(personId) => {
+            const p = people.find((item) => item.id === personId);
+            if (p && onRenamePerson) onRenamePerson(p);
+          }}
         />
       </div>
 

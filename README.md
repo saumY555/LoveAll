@@ -92,3 +92,15 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 - [ ] **Phase 5**: AI Face Grouping & Discovery (Decoupled Python worker, face detection, clustering, manual corrections, opt-out)
 - [ ] **Phase 6**: Personalized Collections & Batch ZIP Downloads (ALL/ANY filters, saved collections, async ZIP generation)
 - [ ] **Phase 7**: End-to-End Multi-User Demonstration
+
+---
+
+## 5. Deployment Notes & Production Architecture
+
+### Concurrent Development Runner
+Run `npm run dev:all` to run both the Next.js application and the background face recognition worker concurrently in a single terminal. On `Ctrl+C` (`SIGINT`), all child process trees (Next.js server, Node/tsx worker, and Python InsightFace daemon) are cleanly terminated with zero orphaned processes.
+
+### Worker Heartbeat & Multi-Instance Service Separation
+> [!IMPORTANT]
+> The background worker currently writes its live heartbeat timestamp to `storage/worker_heartbeat.json` on the local/shared disk. When deploying the face worker as a separate container or standalone cloud service (e.g. separate Docker container, Kubernetes Pod, Railway/Render background worker), **this heartbeat must move from `storage/worker_heartbeat.json` to the database** (e.g. a dedicated `WorkerHeartbeat` table or Redis key) so that distributed web API instances can monitor worker health across machines.
+

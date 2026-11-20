@@ -33,6 +33,14 @@ export interface DetectedFace {
   confidence: number;
   embedding: number[];
   thumbnailFilename: string;
+  blurScore?: number | null;
+  brightness?: number | null;
+  yawDeg?: number | null;
+  rollDeg?: number | null;
+  pitchDeg?: number | null;
+  boxWidth?: number | null;
+  boxHeight?: number | null;
+  landmarks?: number[][] | null;
 }
 
 export interface ClusterGroup {
@@ -115,6 +123,14 @@ export async function scanPhotoForFaces(
           embedding: f.embedding,
           confidence: f.confidence,
           thumbnailUrl: `/api/faces/${f.thumbnailFilename}`,
+          blurScore: f.blurScore ?? null,
+          brightness: f.brightness ?? null,
+          yawDeg: f.yawDeg ?? null,
+          rollDeg: f.rollDeg ?? null,
+          pitchDeg: f.pitchDeg ?? null,
+          boxWidth: f.boxWidth ?? null,
+          boxHeight: f.boxHeight ?? null,
+          landmarks: (f.landmarks as unknown as Prisma.InputJsonValue) ?? Prisma.DbNull,
           isNoise: false,
         })),
       });
@@ -221,7 +237,7 @@ export async function runBatchFaceDetection(
  * Run clustering on face embeddings outside of any DB transaction
  */
 export async function runPythonClustering(
-  faces: Array<{ id: string; embedding: number[]; confidence: number; thumbnailUrl?: string | null }>,
+  faces: Array<{ id: string; embedding: number[]; confidence: number; thumbnailUrl?: string | null; photoId?: string }>,
   options?: { eps?: number; minSamples?: number }
 ): Promise<ClusterResult> {
   if (faces.length === 0) {
@@ -237,6 +253,7 @@ export async function runPythonClustering(
     id: f.id,
     embedding: f.embedding,
     confidence: f.confidence,
+    photoId: f.photoId,
   }));
 
   const child = execFile(
@@ -282,10 +299,44 @@ export async function persistScanAndClusterTransaction(params: {
   successfulPhotoIds: string[];
   allDetectedFaces: BatchDetectionOutput['allDetectedFaces'];
   clusterResult: ClusterResult;
-  existingPeople: Array<{ id: string; name: string | null; thumbnailUrl: string | null; faces: Array<{ id: string }> }>;
-  allFacesMap: Map<string, { id: string; thumbnailUrl?: string | null }>;
+  existingPeople: Array<{
+    id: string;
+    name: string | null;
+    thumbnailUrl: string | null;
+    isHidden?: boolean;
+    hiddenCentroid?: any;
+    faces: Array<{ id: string }>;
+  }>;
+  allFacesMap: Map<
+    string,
+    {
+      id: string;
+      thumbnailUrl?: string | null;
+      embedding?: any;
+      photoId?: string;
+      boxWidth?: number | null;
+      boxHeight?: number | null;
+      confidence?: number | null;
+      blurScore?: number | null;
+      brightness?: number | null;
+      yawDeg?: number | null;
+    }
+  >;
 }): Promise<void> {
   const { eventId, successfulPhotoIds, allDetectedFaces, clusterResult, existingPeople, allFacesMap } = params;
+
+  // Snapshot existing hidden centroids before creating new people or deleting old ones
+  const hiddenCentroids: Array<{ centroid: number[] }> = [];
+  for (const ep of existingPeople) {
+    if (ep.isHidden && ep.hiddenCentroid) {
+      const c = Array.isArray(ep.hiddenCentroid)
+        ? ep.hiddenCentroid
+        : (typeof ep.hiddenCentroid === 'string' ? JSON.parse(ep.hiddenCentroid) : null);
+      if (Array.isArray(c) && c.length === 512) {
+        hiddenCentroids.push({ centroid: c });
+      }
+    }
+  }
 
   const newPeopleToCreate: Array<{
     id: string;
@@ -293,6 +344,8 @@ export async function persistScanAndClusterTransaction(params: {
     name: string;
     thumbnailUrl: string | null;
     isCover: boolean;
+    isHidden: boolean;
+    hiddenCentroid: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
   }> = [];
 
   const personThumbUpdates: Array<{ personId: string; thumbnailUrl: string }> = [];
@@ -303,6 +356,37 @@ export async function persistScanAndClusterTransaction(params: {
     const cluster = clusterResult.clusters[i];
     const repFace = allFacesMap.get(cluster.representativeFaceId);
     const thumbUrl = repFace?.thumbnailUrl || null;
+
+    // Check display qualification (Item 4):
+    // 1. Multi-photo: >= 2 distinct photos
+    // 2. High-Quality Singleton: 1 distinct photo, 1 face, box >= 75, conf >= 0.85, brightness >= 40.0, blur >= 20.0, |yaw| <= 80
+    const clusterFaces = cluster.faceIds.map((fid) => allFacesMap.get(fid)).filter(Boolean) as any[];
+    const uniquePhotoIds = new Set(clusterFaces.map((f) => f.photoId));
+    const isMultiPhoto = uniquePhotoIds.size >= 2;
+
+    let isHqSingleton = false;
+    if (uniquePhotoIds.size === 1 && cluster.faceIds.length === 1 && clusterFaces.length > 0) {
+      const f = clusterFaces[0];
+      const minBox = Math.min(f.boxWidth ?? 0, f.boxHeight ?? 0);
+      const conf = f.confidence ?? 0;
+      const b = f.brightness ?? 0;
+      const blur = f.blurScore ?? 0;
+      const yaw = Math.abs(f.yawDeg ?? 0);
+      isHqSingleton =
+        minBox >= 75 &&
+        conf >= 0.85 &&
+        b >= 40.0 &&
+        blur >= 20.0 &&
+        (f.yawDeg === null || f.yawDeg === undefined || yaw <= 80);
+    }
+
+    if (!isMultiPhoto && !isHqSingleton) {
+      // Item 4: Do NOT create a Person row for non-display singletons! Keep faces unassigned (personId = null)
+      for (const fId of cluster.faceIds) {
+        assignments.push({ faceId: fId, personId: null, isNoise: false });
+      }
+      continue;
+    }
 
     const existingMatch = existingPeople.find((p) =>
       p.faces.some((pf) => cluster.faceIds.includes(pf.id))
@@ -317,12 +401,43 @@ export async function persistScanAndClusterTransaction(params: {
     } else {
       peopleCount += 1;
       personId = crypto.randomUUID();
+
+      // Check if this new person matches a previously hidden centroid (sim >= 0.70)
+      let isInheritedHidden = false;
+      let inheritedCentroid: number[] | null = null;
+
+      if (hiddenCentroids.length > 0) {
+        const clusterEmbs = cluster.faceIds
+          .map((fid) => allFacesMap.get(fid)?.embedding)
+          .filter(Boolean) as number[][];
+        if (clusterEmbs.length > 0) {
+          const sum = new Array(512).fill(0);
+          for (const e of clusterEmbs) for (let k = 0; k < 512; k++) sum[k] += e[k];
+          const norm = Math.hypot(...sum) || 1;
+          const newC = sum.map((v) => v / norm);
+
+          for (const hc of hiddenCentroids) {
+            let dot = 0;
+            for (let k = 0; k < 512; k++) dot += newC[k] * hc.centroid[k];
+            if (dot >= 0.70) {
+              isInheritedHidden = true;
+              inheritedCentroid = hc.centroid;
+              break;
+            }
+          }
+        }
+      }
+
       newPeopleToCreate.push({
         id: personId,
         eventId,
         name: `Person ${peopleCount}`,
         thumbnailUrl: thumbUrl,
         isCover: i === 0,
+        isHidden: isInheritedHidden,
+        hiddenCentroid: isInheritedHidden && inheritedCentroid
+          ? (inheritedCentroid as unknown as Prisma.InputJsonValue)
+          : Prisma.DbNull,
       });
     }
 
@@ -351,13 +466,21 @@ export async function persistScanAndClusterTransaction(params: {
       // 2. Insert new faces in chunks of 150
       for (const chunk of faceChunks) {
         await tx.face.createMany({
-          data: chunk.map((f) => ({
+          data: chunk.map((f: any) => ({
             id: f.id,
             photoId: f.photoId,
             boundingBox: f.boundingBox,
             embedding: f.embedding,
             confidence: f.confidence,
             thumbnailUrl: f.thumbnailUrl,
+            blurScore: f.blurScore ?? null,
+            brightness: f.brightness ?? null,
+            yawDeg: f.yawDeg ?? null,
+            rollDeg: f.rollDeg ?? null,
+            pitchDeg: f.pitchDeg ?? null,
+            boxWidth: f.boxWidth ?? null,
+            boxHeight: f.boxHeight ?? null,
+            landmarks: (f.landmarks as unknown as Prisma.InputJsonValue) ?? Prisma.DbNull,
             isNoise: false,
           })),
         });

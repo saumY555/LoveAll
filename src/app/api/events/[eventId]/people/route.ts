@@ -28,13 +28,19 @@ export async function GET(
     }
 
     const people = await prisma.person.findMany({
-      where: { eventId },
+      where: { eventId, isHidden: false },
       include: {
         faces: {
           select: {
             id: true,
             photoId: true,
             thumbnailUrl: true,
+            confidence: true,
+            boxWidth: true,
+            boxHeight: true,
+            blurScore: true,
+            brightness: true,
+            yawDeg: true,
           },
         },
       },
@@ -50,17 +56,57 @@ export async function GET(
       },
     });
 
-    const formattedPeople = people.map((p) => {
-      const distinctPhotoIds = new Set(p.faces.map((f) => f.photoId));
-      return {
-        id: p.id,
-        name: p.name || 'Unnamed Person',
-        thumbnailUrl: p.thumbnailUrl || p.faces[0]?.thumbnailUrl || null,
-        photoCount: distinctPhotoIds.size,
-        faceCount: p.faces.length,
-        isCover: p.isCover,
-      };
-    });
+    // Apply Quality Gate:
+    // 1. Multi-photo: >= 2 distinct photos with qualifying high-quality faces
+    // 2. High-Quality Singleton: exactly 1 distinct photo, 1 face, min(w,h) >= 75, conf >= 0.85, brightness >= 40, blur >= 20, |yaw| <= 80
+    const formattedPeople = people
+      .filter((p) => {
+        // High quality face definition for multi-photo support
+        const goodFaces = p.faces.filter((f) => {
+          const minBox = Math.min(f.boxWidth ?? 0, f.boxHeight ?? 0);
+          const conf = f.confidence ?? 0;
+          const blur = f.blurScore ?? 0;
+          const yaw = Math.abs(f.yawDeg ?? 0);
+          return conf >= 0.80 && minBox >= 60 && blur >= 20.0 && (f.yawDeg === null || yaw <= 80);
+        });
+
+        const distinctGoodPhotos = new Set(goodFaces.map((f) => f.photoId)).size;
+        const distinctAllPhotos = new Set(p.faces.map((f) => f.photoId)).size;
+
+        if (distinctGoodPhotos >= 2) {
+          return true;
+        }
+
+        // Check High-Quality Singleton rule
+        if (distinctAllPhotos === 1 && p.faces.length === 1) {
+          const f = p.faces[0];
+          const minBox = Math.min(f.boxWidth ?? 0, f.boxHeight ?? 0);
+          const conf = f.confidence ?? 0;
+          const b = f.brightness ?? 0;
+          const blur = f.blurScore ?? 0;
+          const yaw = Math.abs(f.yawDeg ?? 0);
+          return (
+            minBox >= 75 &&
+            conf >= 0.85 &&
+            b >= 40.0 &&
+            blur >= 20.0 &&
+            (f.yawDeg === null || yaw <= 80)
+          );
+        }
+
+        return false;
+      })
+      .map((p) => {
+        const distinctPhotoIds = new Set(p.faces.map((f) => f.photoId));
+        return {
+          id: p.id,
+          name: p.name || 'Unnamed Person',
+          thumbnailUrl: p.thumbnailUrl || p.faces[0]?.thumbnailUrl || null,
+          photoCount: distinctPhotoIds.size,
+          faceCount: p.faces.length,
+          isCover: p.isCover,
+        };
+      });
 
     return NextResponse.json({
       people: formattedPeople,

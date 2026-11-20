@@ -17,13 +17,31 @@ import {
   persistScanAndClusterTransaction,
   ClusterResult,
 } from '../src/lib/faceService';
+import { Prisma } from '@prisma/client';
+import fs from 'node:fs';
 
-const BATCH_SIZE = 20;
+const BATCH_SIZE = 25;
 const SLEEP_IDLE_MS = 2000;
 const RECOVERY_INTERVAL_MS = 30_000; // Recover stale photos every 30 seconds
-const STALE_PHOTO_TIMEOUT_MS = 180_000; // Reset photos stuck in PROCESSING for > 3 min
+const STALE_PHOTO_TIMEOUT_MS = 300_000; // Reset photos stuck in PROCESSING for > 5 min (crash recovery)
 // Only run intermediate (live-preview) clustering every this many batches; always run on completion
 const CLUSTER_EVERY_N_BATCHES = 5;
+
+const HEARTBEAT_FILE = path.resolve(process.cwd(), 'storage', 'worker_heartbeat.json');
+
+function writeHeartbeat() {
+  try {
+    const dir = path.dirname(HEARTBEAT_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      HEARTBEAT_FILE,
+      JSON.stringify({ timestamp: Date.now(), pid: process.pid }),
+      'utf8'
+    );
+  } catch {
+    // Non-fatal
+  }
+}
 
 async function withDbRetry<T>(
   operation: () => Promise<T>,
@@ -73,6 +91,14 @@ interface DetectedFace {
   confidence: number;
   embedding: number[];
   thumbnailFilename: string;
+  blurScore?: number | null;
+  brightness?: number | null;
+  yawDeg?: number | null;
+  rollDeg?: number | null;
+  pitchDeg?: number | null;
+  boxWidth?: number | null;
+  boxHeight?: number | null;
+  landmarks?: number[][] | null;
 }
 
 interface WorkerTaskResponse {
@@ -225,7 +251,7 @@ async function recoverStaleProcessingPhotos() {
 
   if (result.count > 0) {
     console.log(
-      `[FaceWorker] [CRASH RECOVERY] Reset ${result.count} stale photos (> 3 min) back to PENDING.`
+      `[FaceWorker] [CRASH RECOVERY] Reset ${result.count} stale photos (> 5 min) back to PENDING.`
     );
   }
 }
@@ -301,9 +327,15 @@ async function runEventClusteringLive(
     },
     select: {
       id: true,
+      photoId: true,
       embedding: true,
       confidence: true,
       thumbnailUrl: true,
+      boxWidth: true,
+      boxHeight: true,
+      brightness: true,
+      blurScore: true,
+      yawDeg: true,
     },
   });
 
@@ -329,6 +361,7 @@ async function runEventClusteringLive(
     action: 'cluster',
     faces: allFaces.map((f) => ({
       id: f.id,
+      photoId: f.photoId,
       embedding: f.embedding,
       confidence: f.confidence,
     })),
@@ -391,8 +424,16 @@ async function main() {
   let batchesProcessed = 0;
   let isRunning = true;
 
+  // Heartbeat timer running every 5 seconds
+  const heartbeatTimer = setInterval(writeHeartbeat, 5000);
+  writeHeartbeat();
+
   const shutdown = () => {
     console.log('\n[FaceWorker] Shutting down gracefully...');
+    clearInterval(heartbeatTimer);
+    try {
+      if (fs.existsSync(HEARTBEAT_FILE)) fs.unlinkSync(HEARTBEAT_FILE);
+    } catch {}
     isRunning = false;
     daemon.stop();
     prisma.$disconnect().finally(() => process.exit(0));
@@ -405,6 +446,7 @@ async function main() {
 
   while (isRunning) {
     try {
+      writeHeartbeat();
       // Periodic crash recovery every 30 seconds
       if (Date.now() - lastRecoveryTime > RECOVERY_INTERVAL_MS) {
         lastRecoveryTime = Date.now();
@@ -453,64 +495,84 @@ async function main() {
         }
       });
 
-      // Persist each result as soon as its detection resolves (all DB writes run in parallel)
-      await Promise.all(
-        detectionPromises.map(async (resultPromise) => {
-          const { photo, faces, error } = await resultPromise;
+      // Wait for all detection tasks in the batch to complete in Python
+      const detectionResults = await Promise.all(detectionPromises);
 
-          if (error) {
-            console.error(`[FaceWorker] Error processing photo ${photo.id}:`, error.message);
-            await prisma.photo
-              .update({
-                where: { id: photo.id },
-                data: {
-                  faceStatus: 'FAILED',
-                  faceError: error.message || 'Unknown error during face scan',
-                  faceProcessedAt: new Date(),
-                },
-              })
-              .catch((err) => console.error('[FaceWorker] Failed to mark photo FAILED:', err));
-            return;
-          }
+      const successful = detectionResults.filter((r) => !r.error);
+      const failed = detectionResults.filter((r) => r.error);
+      const successfulPhotoIds = successful.map((r) => r.photo.id);
 
-          // Persist faces and mark photo DONE with automatic retry
-          await withDbRetry(
-            () =>
-              prisma.$transaction(
-                async (tx) => {
-                  // Delete old faces for this photo (e.g. on rescan)
-                  await tx.face.deleteMany({ where: { photoId: photo.id } });
+      const allFaceRows: any[] = [];
+      for (const { photo, faces } of successful) {
+        for (const f of faces) {
+          allFaceRows.push({
+            id: crypto.randomUUID(),
+            photoId: photo.id,
+            boundingBox: f.boundingBox,
+            embedding: f.embedding,
+            confidence: f.confidence,
+            thumbnailUrl: `/api/faces/${f.thumbnailFilename}`,
+            blurScore: f.blurScore ?? null,
+            brightness: f.brightness ?? null,
+            yawDeg: f.yawDeg ?? null,
+            rollDeg: f.rollDeg ?? null,
+            pitchDeg: f.pitchDeg ?? null,
+            boxWidth: f.boxWidth ?? null,
+            boxHeight: f.boxHeight ?? null,
+            landmarks: (f.landmarks as unknown as Prisma.InputJsonValue) ?? Prisma.DbNull,
+            isLowQuality: false, // gate stays off in Stage 1
+            isNoise: false,
+          });
+        }
+      }
 
-                  if (faces.length > 0) {
-                    await tx.face.createMany({
-                      data: faces.map((f) => ({
-                        id: crypto.randomUUID(),
-                        photoId: photo.id,
-                        boundingBox: f.boundingBox,
-                        embedding: f.embedding,
-                        confidence: f.confidence,
-                        thumbnailUrl: `/api/faces/${f.thumbnailFilename}`,
-                        isNoise: false,
-                      })),
-                    });
-                  }
+      // Persist the entire batch in a single high-performance database transaction (25 photos per tx)
+      await withDbRetry(
+        () =>
+          prisma.$transaction(
+            async (tx) => {
+              if (successfulPhotoIds.length > 0) {
+                // Delete old faces for this batch of photos
+                await tx.face.deleteMany({
+                  where: { photoId: { in: successfulPhotoIds } },
+                });
 
-                  await tx.photo.update({
-                    where: { id: photo.id },
-                    data: {
-                      faceStatus: 'DONE',
-                      faceProcessedAt: new Date(),
-                      faceError: null,
-                    },
-                  });
-                },
-                { maxWait: 15000, timeout: 15000 }
-              ),
-            `saveFaces(${photo.id})`
-          );
+                // Insert all new faces in chunks of 200
+                for (let i = 0; i < allFaceRows.length; i += 200) {
+                  const chunk = allFaceRows.slice(i, i + 200);
+                  await tx.face.createMany({ data: chunk });
+                }
 
-          console.log(`[FaceWorker] Photo ${photo.id}: ${faces.length} face(s) saved -> DONE`);
-        })
+                // Update photos to DONE in one bulk statement
+                await tx.photo.updateMany({
+                  where: { id: { in: successfulPhotoIds } },
+                  data: {
+                    faceStatus: 'DONE',
+                    faceProcessedAt: new Date(),
+                    faceError: null,
+                  },
+                });
+              }
+
+              // Record any failed photos
+              for (const { photo, error } of failed) {
+                await tx.photo.update({
+                  where: { id: photo.id },
+                  data: {
+                    faceStatus: 'FAILED',
+                    faceError: error?.message || 'Detection failed',
+                    faceProcessedAt: new Date(),
+                  },
+                });
+              }
+            },
+            { maxWait: 15000, timeout: 20000 }
+          ),
+        `batchSaveFaces(${claimedPhotos.length} photos)`
+      );
+
+      console.log(
+        `[FaceWorker] Batch #${batchesProcessed} saved: ${successfulPhotoIds.length} photo(s) DONE (${allFaceRows.length} face(s)), ${failed.length} failed.`
       );
 
       // --- FIX #1: Lazy clustering ---

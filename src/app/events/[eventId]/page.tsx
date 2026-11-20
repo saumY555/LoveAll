@@ -24,6 +24,7 @@ import { PhotoLightboxModal } from '@/components/photos/PhotoLightboxModal';
 import { PrivacyConsentModal } from '@/components/events/PrivacyConsentModal';
 import { RenamePersonModal } from '@/components/photos/RenamePersonModal';
 import { BatchDeleteModal } from '@/components/photos/BatchDeleteModal';
+import { playFaceGroupingCompleteSound } from '@/lib/audio';
 
 export default function EventDetailPage({
   params,
@@ -51,7 +52,9 @@ export default function EventDetailPage({
 
   // Background Face Scan State
   const [isScanning, setIsScanning] = useState(false);
+  const [serviceWarning, setServiceWarning] = useState<string | null>(null);
   const isScanningRef = useRef(false);
+  const wasScanningRef = useRef(false);
   useEffect(() => {
     isScanningRef.current = isScanning;
   }, [isScanning]);
@@ -224,29 +227,43 @@ export default function EventDetailPage({
       if (!res.ok) return;
       const data = await res.json();
 
+      setServiceWarning(data.serviceWarning || null);
+
       if (data.isScanning || data.pending > 0 || data.processing > 0) {
         setIsScanning(true);
+        wasScanningRef.current = true;
         // Live update people and photos during active scan so newly grouped faces appear in real-time
         await Promise.all([fetchPeople(), fetchPhotos()]);
       } else {
+        if (wasScanningRef.current) {
+          wasScanningRef.current = false;
+          playFaceGroupingCompleteSound();
+          showToast('Face grouping complete! ✨');
+        }
         setIsScanning(false);
         await Promise.all([fetchPeople(), fetchPhotos()]);
       }
     } catch {
       // Ignored
     }
-  }, [eventId, fetchPeople, fetchPhotos]);
+  }, [eventId, fetchPeople, fetchPhotos, showToast]);
+
+  // Initial status check on mount
+  useEffect(() => {
+    pollScanStatus();
+  }, [pollScanStatus]);
 
   useEffect(() => {
-    if (!isScanning) return;
+    if (!isScanning && !serviceWarning) return;
     const interval = setInterval(pollScanStatus, 2500);
     return () => clearInterval(interval);
-  }, [isScanning, pollScanStatus]);
+  }, [isScanning, serviceWarning, pollScanStatus]);
 
   // Trigger Face Scan
   const handleRunFaceScan = useCallback(
     async (showAlert = true) => {
       setIsScanning(true);
+      wasScanningRef.current = true;
       try {
         const res = await fetch(`/api/events/${eventId}/faces/scan`, {
           method: 'POST',
@@ -404,6 +421,7 @@ export default function EventDetailPage({
             matchingCount={photos.length}
             totalPhotosCount={totalPhotosCount}
             isScanning={isScanning}
+            serviceWarning={serviceWarning}
             onGroupFaces={handleRunFaceScan}
             onOpenPrivacy={() => setIsPrivacyModalOpen(true)}
             onRenamePerson={(p) => setRenamingPerson(p)}
@@ -690,10 +708,23 @@ export default function EventDetailPage({
         onClose={() => setRenamingPerson(null)}
         eventId={event.id}
         person={renamingPerson}
+        isOwner={isOwner}
+        allPeople={people.map((p, idx) => ({
+          id: p.id,
+          name: p.name && p.name !== 'Unnamed Person' ? p.name : `Person ${idx + 1}`,
+        }))}
         onRenamed={(personId, newName) => {
           setPeople((prev) =>
             prev.map((p) => (p.id === personId ? { ...p, name: newName } : p))
           );
+        }}
+        onHidden={(personId) => {
+          setPeople((prev) => prev.filter((p) => p.id !== personId));
+          fetchPhotos();
+        }}
+        onMerged={() => {
+          fetchPeople();
+          fetchPhotos();
         }}
       />
 

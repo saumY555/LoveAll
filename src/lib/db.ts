@@ -5,6 +5,30 @@ import { PrismaClient } from "@prisma/client";
 try {
   dns.setDefaultResultOrder("ipv4first");
   dns.setServers(["8.8.8.8", "1.1.1.1", "8.8.4.4"]);
+
+  const origLookup = dns.lookup;
+  dns.lookup = function (
+    hostname: string,
+    options: any,
+    callback: (err: NodeJS.ErrnoException | null, address: any, family?: any) => void
+  ) {
+    if (typeof options === "function") {
+      callback = options;
+      options = {};
+    }
+    origLookup(hostname, options, (err, address, family) => {
+      if (err && hostname.includes("neon.tech")) {
+        dns.resolve4(hostname, (rErr, addrs) => {
+          if (!rErr && addrs && addrs.length > 0) {
+            return callback(null, addrs[0], 4);
+          }
+          return callback(err, address, family);
+        });
+      } else {
+        return callback(err, address, family);
+      }
+    });
+  } as typeof dns.lookup;
 } catch {
   // Ignored in environments where setServers or setDefaultResultOrder is restricted
 }

@@ -15,6 +15,7 @@ interface MatchPanelProps {
   onModeChange: (mode: 'together' | 'either') => void;
   onClear: () => void;
   matchingCount: number;
+  onManagePerson?: (personId: string) => void;
 }
 
 export function MatchPanel({
@@ -23,6 +24,7 @@ export function MatchPanel({
   onModeChange,
   onClear,
   matchingCount,
+  onManagePerson,
 }: MatchPanelProps) {
   const clipBaseId = useId().replace(/:/g, '_');
   const count = selectedPeople.length;
@@ -268,9 +270,26 @@ export function MatchPanel({
     <div className="stage" aria-live="polite">
       <div className="sh">
         <h3>Photos with {formattedNames}</h3>
-        <button className="clear" type="button" onClick={onClear}>
-          Clear
-        </button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {count === 1 && onManagePerson && (
+            <button
+              className="clear"
+              type="button"
+              style={{
+                background: 'var(--ink, #18181b)',
+                color: '#fff',
+                borderColor: 'var(--ink, #18181b)',
+                fontWeight: 700,
+              }}
+              onClick={() => onManagePerson(selectedPeople[0].id)}
+            >
+              Manage
+            </button>
+          )}
+          <button className="clear" type="button" onClick={onClear}>
+            Clear
+          </button>
+        </div>
       </div>
 
       {renderDiagram()}

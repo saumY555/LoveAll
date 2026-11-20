@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import path from 'node:path';
+import fs from 'node:fs';
 import { getAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { checkEventAccess } from '@/lib/permissions';
+
+const HEARTBEAT_FILE = path.resolve(process.cwd(), 'storage', 'worker_heartbeat.json');
+const HEARTBEAT_STALE_MS = 20_000; // Consider worker heartbeat stale after 20 seconds
 
 /**
  * GET /api/events/[eventId]/faces/status
@@ -57,7 +62,46 @@ export async function GET(
 
     counts.isScanning = counts.pending > 0 || counts.processing > 0;
 
-    return NextResponse.json(counts);
+    // Check worker heartbeat
+    let isWorkerAlive = false;
+    try {
+      if (fs.existsSync(HEARTBEAT_FILE)) {
+        const raw = fs.readFileSync(HEARTBEAT_FILE, 'utf8');
+        const hb = JSON.parse(raw);
+        if (Date.now() - hb.timestamp < HEARTBEAT_STALE_MS) {
+          isWorkerAlive = true;
+        }
+      }
+    } catch {
+      isWorkerAlive = false;
+    }
+
+    // Check if any photo has been PENDING for > 30 seconds
+    let hasStalePending = false;
+    if (counts.pending > 0) {
+      const thirtySecAgo = new Date(Date.now() - 30_000);
+      const stalePhoto = await prisma.photo.findFirst({
+        where: {
+          eventId,
+          faceStatus: 'PENDING',
+          isDeleted: false,
+          createdAt: { lt: thirtySecAgo },
+        },
+        select: { id: true },
+      });
+      if (stalePhoto) {
+        hasStalePending = true;
+      }
+    }
+
+    const serviceWarning =
+      hasStalePending && !isWorkerAlive ? "Processing service isn't running" : null;
+
+    return NextResponse.json({
+      ...counts,
+      serviceRunning: isWorkerAlive,
+      serviceWarning,
+    });
   } catch (err: unknown) {
     console.error('[API faces status GET error]:', err);
     return NextResponse.json(

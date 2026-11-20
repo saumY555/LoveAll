@@ -3,7 +3,7 @@ import sys
 import json
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 import onnxruntime as ort
 from insightface.app import FaceAnalysis
 # sklearn's AgglomerativeClustering triggers _reachability.pyd which is blocked
@@ -11,6 +11,26 @@ from insightface.app import FaceAnalysis
 # Use scipy's equivalent (linkage + fcluster) instead — same algorithm, no blocked DLL.
 from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.spatial.distance import pdist
+
+def load_image_bgr_oriented(image_path: str):
+    """
+    Read an image respecting its EXIF Orientation tag (tag 0x0112).
+    OpenCV's cv2.imread ignores EXIF tags, leading to sideways/inverted images
+    from mobile devices. This helper transposes it correctly so faces are upright.
+    """
+    try:
+        with Image.open(image_path) as pil_im:
+            transposed = ImageOps.exif_transpose(pil_im)
+            rgb = np.array(transposed)
+            if rgb.ndim == 2:
+                return cv2.cvtColor(rgb, cv2.COLOR_GRAY2BGR)
+            elif rgb.shape[2] == 4:
+                return cv2.cvtColor(rgb, cv2.COLOR_RGBA2BGR)
+            elif rgb.shape[2] == 3:
+                return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+    except Exception:
+        pass
+    return cv2.imread(image_path)
 
 class FaceEngine:
     def __init__(
@@ -92,6 +112,34 @@ class FaceEngine:
                 emb = emb / norm
             emb_list = [round(float(v), 6) for v in emb]
 
+            # Compute landmarks and head angles (yaw, roll)
+            kps = f.kps.tolist() if getattr(f, 'kps', None) is not None else []
+            yaw_deg = None
+            roll_deg = None
+            if len(kps) >= 5:
+                le, re, nose = kps[0], kps[1], kps[2]
+                eye_dx = re[0] - le[0]
+                eye_dy = re[1] - le[1]
+                eye_dist = float(np.hypot(eye_dx, eye_dy))
+                if eye_dist > 1e-3:
+                    eye_mid_x = (le[0] + re[0]) / 2.0
+                    offset_x = (nose[0] - eye_mid_x) / (eye_dist / 2.0)
+                    clamped = max(-1.0, min(1.0, offset_x))
+                    yaw_deg = round(float(np.arcsin(clamped) * (180.0 / np.pi)), 1)
+                    roll_deg = round(float(np.arctan2(eye_dy, eye_dx) * (180.0 / np.pi)), 1)
+
+            # Crop for raw blur & brightness metrics (exact bounding box)
+            x1, y1 = max(0, bbox[0]), max(0, bbox[1])
+            x2, y2 = min(orig_w, bbox[2]), min(orig_h, bbox[3])
+            raw_crop_bgr = img_bgr[y1:y2, x1:x2]
+            brightness = None
+            blur_score = None
+            if raw_crop_bgr.size > 0:
+                gray_crop = cv2.cvtColor(raw_crop_bgr, cv2.COLOR_BGR2GRAY)
+                brightness = round(float(np.mean(gray_crop)), 1)
+                gray_112 = cv2.resize(gray_crop, (112, 112), interpolation=cv2.INTER_AREA)
+                blur_score = round(float(cv2.Laplacian(gray_112, cv2.CV_64F).var()), 1)
+
             # Generate face thumbnail with 20% margin
             margin_x = int(fw * 0.20)
             margin_y = int(fh * 0.20)
@@ -125,6 +173,14 @@ class FaceEngine:
                 "confidence": round(score, 4),
                 "embedding": emb_list,
                 "thumbnailFilename": thumb_filename,
+                "blurScore": blur_score,
+                "brightness": brightness,
+                "yawDeg": yaw_deg,
+                "rollDeg": roll_deg,
+                "pitchDeg": None,
+                "boxWidth": fw,
+                "boxHeight": fh,
+                "landmarks": [[round(float(p[0]), 1), round(float(p[1]), 1)] for p in kps] if kps else None,
             })
             face_idx += 1
 
@@ -143,7 +199,7 @@ class FaceEngine:
             raise FileNotFoundError(f"Image not found: {image_path}")
 
         os.makedirs(output_faces_dir, exist_ok=True)
-        img_bgr = cv2.imread(image_path)
+        img_bgr = load_image_bgr_oriented(image_path)
         if img_bgr is None:
             raise ValueError(f"Failed to read image at: {image_path}")
 
@@ -176,7 +232,7 @@ class FaceEngine:
                 if not os.path.exists(img_path):
                     results[p_id] = {"error": f"Image not found: {img_path}", "faces": []}
                     continue
-                img_bgr = cv2.imread(img_path)
+                img_bgr = load_image_bgr_oriented(img_path)
                 if img_bgr is None:
                     results[p_id] = {"error": f"Failed to read image: {img_path}", "faces": []}
                     continue
@@ -231,6 +287,17 @@ class FaceEngine:
         # This is mathematically identical to sklearn AgglomerativeClustering(
         #   metric='cosine', linkage='average', distance_threshold=eps)
         dists = pdist(embeddings, metric='cosine')
+
+        # Cannot-link constraint: apply high penalty (1000.0) between faces from the same photo
+        k = 0
+        for i in range(len(faces_data)):
+            p_i = faces_data[i].get("photoId")
+            for j in range(i + 1, len(faces_data)):
+                p_j = faces_data[j].get("photoId")
+                if p_i and p_j and p_i == p_j:
+                    dists[k] = 1000.0
+                k += 1
+
         Z = linkage(dists, method='average')
         # fcluster returns 1-based labels; subtract 1 to 0-index
         raw_labels = fcluster(Z, t=eps, criterion='distance') - 1
@@ -241,11 +308,56 @@ class FaceEngine:
                 clusters_dict[label] = []
             clusters_dict[label].append(faces_data[idx])
 
+        # Post-check: recursively split any cluster holding two faces from the same photo by embeddings
+        from scipy.spatial.distance import squareform
+
+        def split_same_photo(group):
+            pids = [f.get("photoId") for f in group if f.get("photoId")]
+            if len(pids) == len(set(pids)) or len(group) <= 1:
+                return [group]
+
+            g_embs = np.array([f["embedding"] for f in group], dtype=np.float32)
+            dmat = pdist(g_embs, metric='cosine')
+            if len(dmat) == 0:
+                return [group]
+            sq = squareform(dmat)
+            seed1, seed2 = np.unravel_index(np.argmax(sq), sq.shape)
+
+            sub1, sub2 = [], []
+            for idx, item in enumerate(group):
+                sim1 = np.dot(g_embs[idx], g_embs[seed1])
+                sim2 = np.dot(g_embs[idx], g_embs[seed2])
+                if sim1 >= sim2:
+                    sub1.append(item)
+                else:
+                    sub2.append(item)
+
+            if not sub1 or not sub2:
+                seen = set()
+                s1, s2 = [], []
+                for item in group:
+                    p = item.get("photoId")
+                    if p and p in seen:
+                        s2.append(item)
+                    else:
+                        if p: seen.add(p)
+                        s1.append(item)
+                sub1, sub2 = s1, s2
+
+            res = []
+            res.extend(split_same_photo(sub1))
+            res.extend(split_same_photo(sub2))
+            return res
+
+        final_groups = []
+        for raw_label, group in sorted(clusters_dict.items()):
+            final_groups.extend(split_same_photo(group))
+
         clusters_output = []
         noise_ids = []
         cluster_counter = 0
 
-        for raw_label, group in sorted(clusters_dict.items()):
+        for group in final_groups:
             if len(group) < min_samples:
                 for f in group:
                     noise_ids.append(f["id"])
